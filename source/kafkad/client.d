@@ -15,8 +15,12 @@ struct BrokerAddress {
 	ushort port;
 }
 
-class KafkaClient
-{
+class KafkaClient {
+	private {
+		BrokerConnection m_conns;
+		string m_clientId;
+	}
+
 	this(BrokerAddress[] bootstrapBrokers, string clientId)
 	{
 		m_clientId = clientId;
@@ -49,10 +53,6 @@ class KafkaClient
 
 	@property auto clientId() { return m_clientId; }
 	@property auto clientId(string v) { return m_clientId = v; }
-
-private:
-	BrokerConnection m_conns;
-	string m_clientId;
 }
 
 enum KafkaCompression {

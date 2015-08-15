@@ -9,6 +9,13 @@ package:
 // todo: leader broker switch when current leader fails
 
 class BrokerConnection {
+	private {
+		KafkaClient m_client;
+		TCPConnection m_conn;
+		Serializer m_ser;
+		Deserializer m_des;
+	}
+
 	this(KafkaClient client, TCPConnection conn) {
 		m_client = client;
 		m_conn = conn;
@@ -25,11 +32,6 @@ class BrokerConnection {
 		m_des.beginMessage(size);
 		return m_des.metadataResponse_v0();
 	}
-private:
-	KafkaClient m_client;
-	TCPConnection m_conn;
-	Serializer m_ser;
-	Deserializer m_des;
 }
 
 auto connectBroker(KafkaClient client, BrokerAddress addr) {
