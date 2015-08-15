@@ -1,11 +1,11 @@
 {
-	"name": "consumer",
-	"description": "Kafka consumer example",
-	"authors": [ "Piotr Szturmaj" ],
-	"dependencies": {
-		"kafka-d": {"version": "~master", "path": "../../"},
-		"vibe-d": "~>0.7.24"
-	},
-	"_versions": ["VibeDefaultMain"],
-	"versions": ["VibeCustomMain"]
+    "name": "consumer",
+    "description": "Kafka consumer example",
+    "authors": [ "Piotr Szturmaj" ],
+    "dependencies": {
+        "kafka-d": {"version": "~master", "path": "../../"},
+        "vibe-d": "~>0.7.24"
+    },
+    "_versions": ["VibeDefaultMain"],
+    "versions": ["VibeCustomMain"]
 }

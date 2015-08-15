@@ -1,10 +1,10 @@
 {
-	"name": "kafka-d",
-	"description": "Native driver for Apache Kafka",
-	"copyright": "Copyright © 2015, Piotr Szturmaj",
-	"authors": ["Piotr Szturmaj"],
-	"dependencies": {
-		"vibe-d": "~>0.7.24"
-	},
-	"targetType": "library"
+    "name": "kafka-d",
+    "description": "Native driver for Apache Kafka",
+    "copyright": "Copyright © 2015, Piotr Szturmaj",
+    "authors": ["Piotr Szturmaj"],
+    "dependencies": {
+        "vibe-d": "~>0.7.24"
+    },
+    "targetType": "library"
 }
