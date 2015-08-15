@@ -74,14 +74,17 @@ struct Serializer {
 
 	private void serializeSlice(ubyte[] s) {
 		auto slice = s;
-		while (slice.length > ChunkSize) {
-			flush();
-			stream.write(slice[0 .. ChunkSize]);
-			slice = slice[ChunkSize .. $];
+		if (slice.length > ChunkSize) {
+			if (p - chunk)
+				flush();
+			while (slice.length > ChunkSize) {
+				stream.write(slice[0 .. ChunkSize]);
+				slice = slice[ChunkSize .. $];
+			}
 		}
 		check(slice.length);
-		core.stdc.string.memcpy(p, s.ptr, s.length);
-		p += s.length;
+		core.stdc.string.memcpy(p, slice.ptr, slice.length);
+		p += slice.length;
 	}
 
 	void serialize(string s) {
