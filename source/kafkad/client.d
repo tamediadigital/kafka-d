@@ -48,6 +48,21 @@ class KafkaClient {
                         p.id, p.leader, p.replicas, p.isr);
                 }
             }
+
+            auto topics = conn.fetch([TopicPartitions("kafkad", [PartitionOffset(0, 0)])]);
+            foreach (ref t; topics) {
+                writefln("Topic: %s", t.topic);
+                foreach (ref p; t.partitions) {
+                    writefln("\tPartition: %d, final offset: %d, error: %d", p.partition, p.endOffset, p.errorCode);
+                    foreach (ref m; p.messages) {
+                        writef("\t\tMessage, offset: %d, size: %d: ", m.offset, m.size);
+                        foreach (chunk; m.valueChunks) {
+                            write(cast(string)chunk);
+                        }
+                        writeln;
+                    }
+                }
+            }
         }
     }
 
@@ -63,5 +78,20 @@ enum KafkaCompression {
 
 class KafkaProducer {
     void put(ubyte[] payload) {
+    }
+}
+
+struct PartitionOffset {
+    int partition;
+    long offset;
+}
+
+struct TopicPartitions {
+    string topic;
+    PartitionOffset[] partitions;
+}
+
+class KafkaConsumer {
+    this(KafkaClient client, TopicPartitions[] topics) {
     }
 }
