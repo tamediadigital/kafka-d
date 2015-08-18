@@ -27,8 +27,9 @@ class KafkaClient {
         MetadataResponse m_metadata;
         bool m_connected;
     }
-
-    this(BrokerAddress[] bootstrapBrokers, string clientId)
+    
+    import std.string, std.process;
+    this(BrokerAddress[] bootstrapBrokers, string clientId = format("kafka-d-%d",thisProcessID) )
     {
         enforce(bootstrapBrokers.length);
         m_bootstrapBrokers = bootstrapBrokers;
