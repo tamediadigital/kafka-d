@@ -134,7 +134,7 @@ class KafkaConsumer {
     auto consume() {
         // TEMP HACK
         auto conn = m_client.m_conns.values[0]; // FIXME
-        return conn.fetch(m_topics);
+        return conn.getFetchTopicRange(m_topics);
     }
 }
 

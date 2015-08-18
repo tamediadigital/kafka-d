@@ -35,7 +35,8 @@ class BrokerConnection {
         return m_des.metadataResponse_v0();
     }
 
-    auto fetch(TopicPartitions[] topics) {
+    auto getFetchTopicRange(TopicPartitions[] topics) {
+        //Review: correlation id
         m_ser.fetchRequest_v0(0, m_client.clientId, topics);
         int size, correlationId;
         m_des.getMessage(size, correlationId);
