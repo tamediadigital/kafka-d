@@ -2,7 +2,10 @@
 
 import kafkad.connection;
 import kafkad.protocol;
+import core.time;
 import std.exception;
+import vibe.core.core;
+import vibe.core.log;
 
 /*
  * what is needed:
@@ -17,68 +20,127 @@ struct BrokerAddress {
 
 class KafkaClient {
     private {
-        BrokerConnection m_conns;
+        BrokerAddress[] m_bootstrapBrokers;
         string m_clientId;
+        BrokerConnection[int] m_conns;
+        NetworkAddress[int] m_hostCache; // node id to netaddr cache
+        MetadataResponse m_metadata;
+        bool m_connected;
     }
 
     this(BrokerAddress[] bootstrapBrokers, string clientId)
     {
-        m_clientId = clientId;
         enforce(bootstrapBrokers.length);
-        bootstrap(bootstrapBrokers);
+        m_bootstrapBrokers = bootstrapBrokers;
+        m_clientId = clientId;
+        m_connected = false;
     }
 
-    private void bootstrap(BrokerAddress[] bootstrapBrokers) {
-        // to consider: get metadata from one broker or from all and check the consistency between the results
-        foreach (brokerAddr; bootstrapBrokers) {
-            auto conn = connectBroker(this, brokerAddr);
-            auto metadata = conn.getMetadata([]);
+    /// Bootstraps client into the cluser
+    /// Params:
+    /// retries = number of bootstrap retries, 0 = retry infinitely
+    /// retryTimeout = time to wait between retries
+    /// returns: true if connected, false if all retries failed
+    bool connect(size_t retries = 0, Duration retryTimeout = 1.seconds) {
+        if (m_connected)
+            return true;
+        auto remainingRetries = retries;
+        while (!retries || remainingRetries--) {
+            foreach (brokerAddr; m_bootstrapBrokers) {
+                try {
+                    import std.conv;
+                    auto tcpConn = connectTCP(brokerAddr.host, brokerAddr.port);
+                    auto host = tcpConn.remoteAddress;
+                    auto conn = new BrokerConnection(this, tcpConn);
+                    m_metadata = conn.getMetadata([]);
+                    m_hostCache = null; // clear the cache
 
-            // temporal code, just for first test, metadata will be used mainly internally
-            import std.stdio;
-            writeln("Broker list:");
-            foreach (ref b; metadata.brokers) {
-                writefln("\tBroker ID: %d, host: %s, port: %d", b.id, b.host, b.port);
-            }
-            writeln("Topic list:");
-            foreach (ref t; metadata.topics) {
-                writefln("\tTopic: %s, partitions:", t.name);
-                foreach (ref p; t.partitions) {
-                    writefln("\t\tPartition: %d, Leader ID: %d, Replicas: %s, In sync replicas: %s",
-                        p.id, p.leader, p.replicas, p.isr);
-                }
-            }
-
-            auto topics = conn.fetch([TopicPartitions("kafkad", [PartitionOffset(0, 0)])]);
-            foreach (ref t; topics) {
-                writefln("Topic: %s", t.topic);
-                foreach (ref p; t.partitions) {
-                    writefln("\tPartition: %d, final offset: %d, error: %d", p.partition, p.endOffset, p.errorCode);
-                    foreach (ref m; p.messages) {
-                        writef("\t\tMessage, offset: %d, size: %d: ", m.offset, m.size);
-                        foreach (chunk; m.valueChunks) {
-                            write(cast(string)chunk);
-                        }
-                        writeln;
+                    int thisId = -1;
+                    // look up this host in the metadata to obtain its node id
+                    // also, fill the nodeid cache
+                    foreach (ref b; m_metadata.brokers) {
+                        enforce(b.port >= 0 && b.port <= ushort.max);
+                        auto bhost = resolveHost(b.host);
+                        bhost.port = cast(ushort)b.port;
+                        if (bhost == host)
+                            thisId = b.id;
+                        m_hostCache[b.id] = bhost;
                     }
+
+                    enforce(thisId >= 0);
+                    conn.id = thisId;
+                    m_conns[conn.id] = conn;
+
+                    debug {
+                        logDebug("Broker list:");
+                        foreach (ref b; m_metadata.brokers) {
+                            logDebug("\tBroker ID: %d, host: %s, port: %d", b.id, b.host, b.port);
+                        }
+                        logDebug("Topic list:");
+                        foreach (ref t; m_metadata.topics) {
+                            logDebug("\tTopic: %s, partitions:", t.name);
+                            foreach (ref p; t.partitions) {
+                                logDebug("\t\tPartition: %d, Leader ID: %d, Replicas: %s, In sync replicas: %s",
+                                    p.id, p.leader, p.replicas, p.isr);
+                            }
+                        }
+                    }
+
+                    m_connected = true;
+                    return true;
+                } catch (Exception e) {
+                    continue;
                 }
             }
+            sleep(retryTimeout);
         }
+        return false;
+    }
+
+    // TODO: handle stale metadata
+    private auto getConn(int id) {
+        auto pconn = id in m_conns;
+        if (!pconn) {
+            auto host = m_hostCache[id];
+            auto tcpconn = connectTCP(host);
+            auto conn = new BrokerConnection(this, tcpconn);
+            m_conns[id] = conn;
+            pconn = &conn;
+        }
+        return *pconn;
+    }
+
+    private auto topicsToConns(TopicPartitions[] topics) {
+        // temp
     }
 
     @property auto clientId() { return m_clientId; }
     @property auto clientId(string v) { return m_clientId = v; }
+
+    @property auto connected() { return m_connected; }
+}
+
+class KafkaConsumer {
+    private {
+        KafkaClient m_client;
+        TopicPartitions[] m_topics;
+    }
+    this(KafkaClient client, TopicPartitions[] topics) {
+        m_client = client;
+        m_topics = topics;
+    }
+
+    auto consume() {
+        // TEMP HACK
+        auto conn = m_client.m_conns.values[0]; // FIXME
+        return conn.fetch(m_topics);
+    }
 }
 
 enum KafkaCompression {
     None = 0,
     GZIP = 1,
     Snappy = 2
-}
-
-class KafkaProducer {
-    void put(ubyte[] payload) {
-    }
 }
 
 struct PartitionOffset {
@@ -89,9 +151,4 @@ struct PartitionOffset {
 struct TopicPartitions {
     string topic;
     PartitionOffset[] partitions;
-}
-
-class KafkaConsumer {
-    this(KafkaClient client, TopicPartitions[] topics) {
-    }
 }

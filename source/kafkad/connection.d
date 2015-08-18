@@ -16,6 +16,8 @@ class BrokerConnection {
         Deserializer m_des;
     }
 
+    int id;
+
     this(KafkaClient client, TCPConnection conn) {
         m_client = client;
         m_conn = conn;
@@ -28,7 +30,7 @@ class BrokerConnection {
         m_ser.metadataRequest_v0(0, m_client.clientId, topics);
         int size, correlationId;
         m_des.getMessage(size, correlationId);
-        assert(correlationId == 0); // todo: handle interleaved messages
+        assert(correlationId == 0);
         m_des.beginMessage(size);
         return m_des.metadataResponse_v0();
     }
@@ -39,15 +41,5 @@ class BrokerConnection {
         m_des.getMessage(size, correlationId);
         m_des.beginMessage(size);
         return m_des.fetchResponse_v0();
-    }
-}
-
-auto connectBroker(KafkaClient client, BrokerAddress addr) {
-    try {
-        auto tcpconn = connectTCP(addr.host, addr.port);
-        auto conn = new BrokerConnection(client, tcpconn);
-        return conn;
-    } catch (Exception e) {
-        return null;
     }
 }
