@@ -1,9 +1,11 @@
 ﻿module kafkad.protocol.common;
 
 /*
- * Kafka requests are always initiated by clients so we only need serializers for requests and deserializers for responses
+ * Kafka requests are always initiated by clients
+ * thus we only need serializers for requests and deserializers for responses
  * 
- * Kafka 0.8.x network protocol is described here: https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol
+ * Kafka 0.8.x network protocol is described here: 
+* https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol
  */
 
 public import core.memory;
@@ -15,8 +17,9 @@ public import vibe.core.stream;
 public import kafkad.client;
 
 package:
+ 
+immutable size_t ChunkSize = 4096; // TODO: configurability,document and describe the effects
 
-immutable size_t ChunkSize = 4096; // TODO: configurability
 
 enum ApiKey : short {
     ProduceRequest = 0,
