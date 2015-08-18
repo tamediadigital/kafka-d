@@ -56,7 +56,7 @@ class KafkaClient {
                     m_metadata = conn.getMetadata([]);
                     m_hostCache = null; // clear the cache
 
-                    int thisId = -1;
+                    int bootstrapBrokerId = -1;
                     // look up this host in the metadata to obtain its node id
                     // also, fill the nodeid cache
                     foreach (ref b; m_metadata.brokers) {
@@ -64,12 +64,12 @@ class KafkaClient {
                         auto bhost = resolveHost(b.host);
                         bhost.port = cast(ushort)b.port;
                         if (bhost == host)
-                            thisId = b.id;
+                            bootstrapBrokerId = b.id;
                         m_hostCache[b.id] = bhost;
                     }
 
-                    enforce(thisId >= 0);
-                    conn.id = thisId;
+                    enforce(bootstrapBrokerId >= 0);
+                    conn.id = bootstrapBrokerId;
                     m_conns[conn.id] = conn;
 
                     debug {
