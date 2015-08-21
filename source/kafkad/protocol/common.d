@@ -53,7 +53,7 @@ struct TopicMetadata {
     PartitionMetadata[] partitions;
 }
 
-struct MetadataResponse {
+struct Metadata {
     Broker[] brokers;
     TopicMetadata[] topics;
 }

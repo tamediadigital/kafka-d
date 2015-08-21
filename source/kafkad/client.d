@@ -24,7 +24,7 @@ class KafkaClient {
         string m_clientId;
         BrokerConnection[int] m_conns;
         NetworkAddress[int] m_hostCache; // node id to netaddr cache
-        MetadataResponse m_metadata;
+        Metadata m_metadata;
         bool m_connected;
     }
     

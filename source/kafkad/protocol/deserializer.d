@@ -147,7 +147,7 @@ struct Deserializer {
     }
 
     auto metadataResponse_v0() {
-        MetadataResponse r;
+        Metadata r;
         deserialize(r);
         return r;
     }

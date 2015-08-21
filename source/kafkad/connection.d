@@ -26,7 +26,7 @@ class BrokerConnection {
     }
 
     // todo: message correlation
-    MetadataResponse getMetadata(string[] topics) {
+    Metadata getMetadata(string[] topics) {
         m_ser.metadataRequest_v0(0, m_client.clientId, topics);
         int size, correlationId;
         m_des.getMessage(size, correlationId);
