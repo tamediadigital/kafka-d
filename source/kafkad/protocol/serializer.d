@@ -2,6 +2,7 @@
 
 import kafkad.protocol.common;
 import kafkad.config;
+import kafkad.exception;
 
 /* serialize data up to ChunkSize, this is not zero-copy unfortunately, as vibe.d's drivers and kernel may do
  * buffering on their own, however, it should minimize the overhead of many, small write() calls to the driver */
@@ -21,7 +22,7 @@ struct Serializer {
 
     void flush() {
         assert(p - chunk);
-        stream.write(chunk[0 .. p - chunk]);
+        stream.write(chunk[0 .. p - chunk]).rethrow!StreamException("Serializer.flush() failed");
         p = chunk;
     }
 
@@ -53,7 +54,7 @@ struct Serializer {
             if (p - chunk)
                 flush();
             while (slice.length > ChunkSize) {
-                stream.write(slice[0 .. ChunkSize]);
+                stream.write(slice[0 .. ChunkSize]).rethrow!StreamException("Serializer.serializeSlice() failed");
                 slice = slice[ChunkSize .. $];
             }
         }

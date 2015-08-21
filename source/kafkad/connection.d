@@ -2,6 +2,7 @@
 
 import kafkad.client;
 import kafkad.protocol;
+import kafkad.exception;
 import vibe.core.net;
 
 package:
@@ -16,7 +17,11 @@ class BrokerConnection {
         Deserializer m_des;
     }
 
-    int id;
+    int id = -1;
+
+    @property NetworkAddress addr() {
+        return m_conn.remoteAddress.rethrow!ConnectionException("Could not get connection's remote address");
+    }
 
     this(KafkaClient client, TCPConnection conn) {
         m_client = client;
