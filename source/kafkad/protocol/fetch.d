@@ -62,6 +62,9 @@ struct FetchMessageRange {
     @property auto ref front() {
         return m_front;
     }
+    
+    //TODO: As an optimization the server is allowed to return a partial message at the 
+    // end of the message set. Clients should handle this case.
     void popFront() {
         enforce(!empty);
         m_remaining -= m_structSize;
@@ -140,6 +143,7 @@ struct FetchTopic {
     FetchPartitionRange partitions;
 }
 
+//TODO: possibly rename?
 struct FetchTopicRange {
     private {
         size_t m_iter, m_length;

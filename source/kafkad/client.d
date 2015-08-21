@@ -27,8 +27,9 @@ class KafkaClient {
         MetadataResponse m_metadata;
         bool m_connected;
     }
-
-    this(BrokerAddress[] bootstrapBrokers, string clientId)
+    
+    import std.string, std.process;
+    this(BrokerAddress[] bootstrapBrokers, string clientId = format("kafka-d-%d",thisProcessID) )
     {
         enforce(bootstrapBrokers.length);
         m_bootstrapBrokers = bootstrapBrokers;
@@ -55,7 +56,7 @@ class KafkaClient {
                     m_metadata = conn.getMetadata([]);
                     m_hostCache = null; // clear the cache
 
-                    int thisId = -1;
+                    int bootstrapBrokerId = -1;
                     // look up this host in the metadata to obtain its node id
                     // also, fill the nodeid cache
                     foreach (ref b; m_metadata.brokers) {
@@ -63,12 +64,12 @@ class KafkaClient {
                         auto bhost = resolveHost(b.host);
                         bhost.port = cast(ushort)b.port;
                         if (bhost == host)
-                            thisId = b.id;
+                            bootstrapBrokerId = b.id;
                         m_hostCache[b.id] = bhost;
                     }
 
-                    enforce(thisId >= 0);
-                    conn.id = thisId;
+                    enforce(bootstrapBrokerId >= 0);
+                    conn.id = bootstrapBrokerId;
                     m_conns[conn.id] = conn;
 
                     debug {
@@ -130,10 +131,12 @@ class KafkaConsumer {
         m_topics = topics;
     }
 
+    //TODO: document whats actually returned
+    //TODO: add explicit return type
     auto consume() {
         // TEMP HACK
         auto conn = m_client.m_conns.values[0]; // FIXME
-        return conn.fetch(m_topics);
+        return conn.getFetchTopicRange(m_topics);
     }
 }
 
