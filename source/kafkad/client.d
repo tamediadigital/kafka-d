@@ -41,7 +41,7 @@ class KafkaClient {
     /// Params:
     /// retries = number of bootstrap retries, 0 = retry infinitely
     /// retryTimeout = time to wait between retries
-    /// returns: true if connected, false if all retries failed
+    /// Returns: true if connected, false if all retries failed
     bool connect(size_t retries = 0, Duration retryTimeout = 1.seconds) {
         if (m_connected)
             return true;
@@ -130,12 +130,12 @@ class KafkaConsumer {
         m_topics = topics;
     }
 
-    //TODO: document whats actually returned
-    //TODO: add explicit return type
-    auto consume() {
+    /// Consumes message from the selected topics and partitions
+    /// Returns: Ranges of ranges for topics, partitions, messages and message chunks
+    TopicRange consume() {
         // TEMP HACK
         auto conn = m_client.m_conns.values[0]; // FIXME
-        return conn.getFetchTopicRange(m_topics);
+        return conn.getTopicRange(m_topics);
     }
 }
 

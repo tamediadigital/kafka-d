@@ -163,6 +163,6 @@ struct Deserializer {
     auto fetchResponse_v0() {
         int numtopics;
         deserialize(numtopics);
-        return FetchTopicRange(&this, numtopics);
+        return TopicRange(&this, numtopics);
     }
 }
