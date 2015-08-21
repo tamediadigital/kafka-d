@@ -41,7 +41,7 @@ struct FetchMessage {
 }
 
 // NOTE: message sets aren't prefixed by array length
-struct FetchMessageRange {
+struct MessageRange {
     private {
         size_t m_remaining, m_structSize;
         FetchMessage m_front;
@@ -90,17 +90,17 @@ struct FetchMessageRange {
     }
 }
 
-struct FetchPartition {
+struct Partition {
     int partition;
     short errorCode;
     long endOffset;
-    FetchMessageRange messages;
+    MessageRange messages;
 }
 
-struct FetchPartitionRange {
+struct PartitionRange {
     private {
         size_t m_iter, m_length;
-        FetchPartition m_front;
+        Partition m_front;
         Deserializer* m_des;
     }
 
@@ -134,20 +134,20 @@ struct FetchPartitionRange {
         m_des.deserialize(m_front.endOffset);
         int messageSetSize;
         m_des.deserialize(messageSetSize);
-        m_front.messages = FetchMessageRange(m_des, messageSetSize);
+        m_front.messages = MessageRange(m_des, messageSetSize);
     }
 }
 
-struct FetchTopic {
+struct Topic {
     string topic; // TODO: cache string memory, to prevent allocation in the deserializer
-    FetchPartitionRange partitions;
+    PartitionRange partitions;
 }
 
-//TODO: possibly rename?
-struct FetchTopicRange {
+//TODO: sub-range skipping
+struct TopicRange {
     private {
         size_t m_iter, m_length;
-        FetchTopic m_front;
+        Topic m_front;
         Deserializer* m_des;
     }
 
@@ -179,6 +179,6 @@ struct FetchTopicRange {
         m_des.deserialize(m_front.topic);
         int numpartitions;
         m_des.deserialize(numpartitions);
-        m_front.partitions = FetchPartitionRange(m_des, numpartitions);
+        m_front.partitions = PartitionRange(m_des, numpartitions);
     }
 }

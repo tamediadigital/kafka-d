@@ -94,6 +94,14 @@ struct Deserializer {
             s = swapEndian(s);
     }
 
+    void deserialize(T)(out T s)
+        if (is(T == enum))
+    {
+        OriginalType!T v;
+        deserialize(v);
+        s = cast(T)v;
+    }
+
     private void deserializeSlice(ubyte[] s) {
         auto slice = s;
         auto tail = min(slice.length, end - p);
@@ -147,7 +155,7 @@ struct Deserializer {
     }
 
     auto metadataResponse_v0() {
-        MetadataResponse r;
+        Metadata r;
         deserialize(r);
         return r;
     }
@@ -155,6 +163,6 @@ struct Deserializer {
     auto fetchResponse_v0() {
         int numtopics;
         deserialize(numtopics);
-        return FetchTopicRange(&this, numtopics);
+        return TopicRange(&this, numtopics);
     }
 }

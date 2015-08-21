@@ -6,6 +6,7 @@ import core.time;
 import std.exception;
 import vibe.core.core;
 import vibe.core.log;
+public import kafkad.config;
 
 /*
  * what is needed:
@@ -20,17 +21,20 @@ struct BrokerAddress {
 
 class KafkaClient {
     private {
+        KafkaConfiguration m_config;
         BrokerAddress[] m_bootstrapBrokers;
         string m_clientId;
         BrokerConnection[int] m_conns;
         NetworkAddress[int] m_hostCache; // node id to netaddr cache
-        MetadataResponse m_metadata;
+        Metadata m_metadata;
         bool m_connected;
     }
     
     import std.string, std.process;
-    this(BrokerAddress[] bootstrapBrokers, string clientId = format("kafka-d-%d",thisProcessID) )
+    this(BrokerAddress[] bootstrapBrokers, string clientId = format("kafka-d-%d",thisProcessID),
+        KafkaConfiguration config = KafkaConfiguration())
     {
+        m_config = config;
         enforce(bootstrapBrokers.length);
         m_bootstrapBrokers = bootstrapBrokers;
         m_clientId = clientId;
@@ -41,7 +45,7 @@ class KafkaClient {
     /// Params:
     /// retries = number of bootstrap retries, 0 = retry infinitely
     /// retryTimeout = time to wait between retries
-    /// returns: true if connected, false if all retries failed
+    /// Returns: true if connected, false if all retries failed
     bool connect(size_t retries = 0, Duration retryTimeout = 1.seconds) {
         if (m_connected)
             return true;
@@ -49,7 +53,6 @@ class KafkaClient {
         while (!retries || remainingRetries--) {
             foreach (brokerAddr; m_bootstrapBrokers) {
                 try {
-                    import std.conv;
                     auto tcpConn = connectTCP(brokerAddr.host, brokerAddr.port);
                     auto host = tcpConn.remoteAddress;
                     auto conn = new BrokerConnection(this, tcpConn);
@@ -118,6 +121,8 @@ class KafkaClient {
     @property auto clientId() { return m_clientId; }
     @property auto clientId(string v) { return m_clientId = v; }
 
+    @property ref const(KafkaConfiguration) config() { return m_config; }
+
     @property auto connected() { return m_connected; }
 }
 
@@ -131,12 +136,12 @@ class KafkaConsumer {
         m_topics = topics;
     }
 
-    //TODO: document whats actually returned
-    //TODO: add explicit return type
-    auto consume() {
+    /// Consumes message from the selected topics and partitions
+    /// Returns: Ranges of ranges for topics, partitions, messages and message chunks
+    TopicRange consume() {
         // TEMP HACK
         auto conn = m_client.m_conns.values[0]; // FIXME
-        return conn.getFetchTopicRange(m_topics);
+        return conn.getTopicRange(m_topics);
     }
 }
 

@@ -26,7 +26,7 @@ class BrokerConnection {
     }
 
     // todo: message correlation
-    MetadataResponse getMetadata(string[] topics) {
+    Metadata getMetadata(string[] topics) {
         m_ser.metadataRequest_v0(0, m_client.clientId, topics);
         int size, correlationId;
         m_des.getMessage(size, correlationId);
@@ -35,9 +35,9 @@ class BrokerConnection {
         return m_des.metadataResponse_v0();
     }
 
-    auto getFetchTopicRange(TopicPartitions[] topics) {
+    auto getTopicRange(TopicPartitions[] topics) {
         //Review: correlation id
-        m_ser.fetchRequest_v0(0, m_client.clientId, topics);
+        m_ser.fetchRequest_v0(0, m_client.clientId, m_client.config, topics);
         int size, correlationId;
         m_des.getMessage(size, correlationId);
         m_des.beginMessage(size);
