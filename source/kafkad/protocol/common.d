@@ -17,7 +17,7 @@ public import vibe.core.stream;
 public import kafkad.client;
 
 package:
- 
+
 immutable size_t ChunkSize = 4096; // TODO: configurability,document and describe the effects
 
 enum ApiKey : short {
@@ -81,7 +81,7 @@ struct Broker {
 }
 
 struct PartitionMetadata {
-    short errorCode;
+    ApiError errorCode;
     int id;
     int leader;
     int[] replicas;

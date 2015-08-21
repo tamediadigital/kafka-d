@@ -94,6 +94,14 @@ struct Deserializer {
             s = swapEndian(s);
     }
 
+    void deserialize(T)(out T s)
+        if (is(T == enum))
+    {
+        OriginalType!T v;
+        deserialize(v);
+        s = cast(T)v;
+    }
+
     private void deserializeSlice(ubyte[] s) {
         auto slice = s;
         auto tail = min(slice.length, end - p);
