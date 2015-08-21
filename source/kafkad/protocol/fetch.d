@@ -63,8 +63,12 @@ struct MessageRange {
         return m_front;
     }
     
-    //TODO: As an optimization the server is allowed to return a partial message at the 
+    // TODO: As an optimization the server is allowed to return a partial message at the 
     // end of the message set. Clients should handle this case.
+    // Another TODO: In general, the return messages will have offsets larger than or equal
+    // to the starting offset. However, with compressed messages, it's possible for the returned
+    // messages to have offsets smaller than the starting offset. The number of such messages is
+    // typically small and the caller is responsible for filtering out those messages.
     void popFront() {
         enforce(!empty);
         m_remaining -= m_structSize;

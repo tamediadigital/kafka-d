@@ -2,6 +2,7 @@
 
 import kafkad.protocol.common;
 import kafkad.protocol.fetch;
+import kafkad.exception;
 
 // read data up to ChunkSize and then deserialize
 
@@ -35,7 +36,7 @@ struct Deserializer {
             p = end;
             while (size) {
                 auto toRead = min(size, ChunkSize);
-                stream.read(chunk[0 .. toRead]);
+                stream.read(chunk[0 .. toRead]).rethrow!StreamException("Deserializer.skipBytes() failed");
                 size -= toRead;
             }
         }
@@ -49,7 +50,7 @@ struct Deserializer {
         // read up to remaining if it's smaller than chunk size, it will prevent blocking if read buffer is empty
         // consider: reading up to vibe's leastSize();
         auto toRead = min(ChunkSize, tail + remaining);
-        stream.read(chunk[tail .. toRead]);
+        stream.read(chunk[tail .. toRead]).rethrow!StreamException("Deserializer.read() failed");
         p = chunk;
         end = chunk + toRead;
         remaining -= toRead - tail;

@@ -7,7 +7,7 @@ void main() {
     runTask({
         debug setLogLevel(LogLevel.debug_);
 		auto client = new KafkaClient([BrokerAddress("192.168.86.10", 9092)], "kafka-d");
-        while (!client.connect(1))
+        while (!client.connect())
             writeln("Trying to bootstrap kafka client...");
 
         auto consumer = new KafkaConsumer(client, [TopicPartitions("kafkad", [PartitionOffset(0, 0)])]);

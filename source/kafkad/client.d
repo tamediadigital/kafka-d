@@ -2,6 +2,7 @@
 
 import kafkad.connection;
 import kafkad.protocol;
+import kafkad.exception;
 import core.time;
 import std.exception;
 import vibe.core.core;
@@ -24,8 +25,8 @@ class KafkaClient {
         KafkaConfiguration m_config;
         BrokerAddress[] m_bootstrapBrokers;
         string m_clientId;
-        BrokerConnection[int] m_conns;
-        NetworkAddress[int] m_hostCache; // node id to netaddr cache
+        BrokerConnection[NetworkAddress] m_conns;
+        NetworkAddress[int] m_hostCache; // broker id to NetworkAddress cache
         Metadata m_metadata;
         bool m_connected;
     }
@@ -42,21 +43,22 @@ class KafkaClient {
     }
 
     /// Bootstraps client into the cluser
-    /// Params:
-    /// retries = number of bootstrap retries, 0 = retry infinitely
-    /// retryTimeout = time to wait between retries
     /// Returns: true if connected, false if all retries failed
-    bool connect(size_t retries = 0, Duration retryTimeout = 1.seconds) {
+    bool connect() {
         if (m_connected)
             return true;
-        auto remainingRetries = retries;
-        while (!retries || remainingRetries--) {
+        return refreshMetadata();
+    }
+
+    private bool refreshMetadata() {
+        auto remainingRetries = m_config.metadataRefreshRetryCount;
+        while (!m_config.metadataRefreshRetryCount || remainingRetries--) {
             foreach (brokerAddr; m_bootstrapBrokers) {
                 try {
-                    auto tcpConn = connectTCP(brokerAddr.host, brokerAddr.port);
-                    auto host = tcpConn.remoteAddress;
-                    auto conn = new BrokerConnection(this, tcpConn);
+                    auto conn = getConn(brokerAddr);
+                    auto host = conn.addr;
                     m_metadata = conn.getMetadata([]);
+                    enforce(m_metadata.brokers.length, "Empty metadata, this may indicate there are no defined topics in the cluster");
                     m_hostCache = null; // clear the cache
 
                     int bootstrapBrokerId = -1;
@@ -64,8 +66,7 @@ class KafkaClient {
                     // also, fill the nodeid cache
                     foreach (ref b; m_metadata.brokers) {
                         enforce(b.port >= 0 && b.port <= ushort.max);
-                        auto bhost = resolveHost(b.host);
-                        bhost.port = cast(ushort)b.port;
+                        auto bhost = resolveBrokerAddr(BrokerAddress(b.host, cast(ushort)b.port));
                         if (bhost == host)
                             bootstrapBrokerId = b.id;
                         m_hostCache[b.id] = bhost;
@@ -73,7 +74,6 @@ class KafkaClient {
 
                     enforce(bootstrapBrokerId >= 0);
                     conn.id = bootstrapBrokerId;
-                    m_conns[conn.id] = conn;
 
                     debug {
                         logDebug("Broker list:");
@@ -89,29 +89,45 @@ class KafkaClient {
                             }
                         }
                     }
-
-                    m_connected = true;
                     return true;
-                } catch (Exception e) {
+                } catch (ConnectionException) {
                     continue;
                 }
             }
-            sleep(retryTimeout);
+            sleep(m_config.metadataRefreshRetryTimeout.msecs);
         }
         return false;
     }
 
-    // TODO: handle stale metadata
-    private auto getConn(int id) {
-        auto pconn = id in m_conns;
+    private NetworkAddress resolveBrokerAddr(BrokerAddress brokerAddr) {
+        auto netAddr = resolveHost(brokerAddr.host).rethrow!ConnectionException("Could not resolve host " ~ brokerAddr.host);
+        netAddr.port = brokerAddr.port; 
+        return netAddr;
+    }
+
+    private BrokerConnection getConn(BrokerAddress brokerAddr) {
+        auto netAddr = resolveBrokerAddr(brokerAddr);
+        return getConn(netAddr);
+    }
+
+    private BrokerConnection getConn(NetworkAddress netAddr) {
+        auto pconn = netAddr in m_conns;
         if (!pconn) {
-            auto host = m_hostCache[id];
-            auto tcpconn = connectTCP(host);
-            auto conn = new BrokerConnection(this, tcpconn);
-            m_conns[id] = conn;
+            auto tcpConn = connectTCP(netAddr).rethrow!ConnectionException("TCP connect to address " ~ netAddr.toString() ~ " failed");
+            auto conn = new BrokerConnection(this, tcpConn);
+            m_conns[netAddr] = conn;
             pconn = &conn;
         }
         return *pconn;
+    }
+
+    // TODO: handle stale metadata
+    private auto getConn(int id) {
+        assert(id in m_hostCache);
+        auto netAddr = m_hostCache[id];
+        auto conn = getConn(netAddr);
+        conn.id = id;
+        return conn;
     }
 
     private auto topicsToConns(TopicPartitions[] topics) {

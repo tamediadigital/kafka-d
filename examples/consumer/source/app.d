@@ -10,7 +10,7 @@ void main() {
         // adjust config's properties if necessary
         
         auto client = new KafkaClient([BrokerAddress("192.168.86.10", 9092)], "kafka-d", config);
-        while (!client.connect(1))
+        while (!client.connect())
             writeln("Trying to bootstrap kafka client...");
 
         auto consumer = new KafkaConsumer(client, [TopicPartitions("kafkad", [PartitionOffset(0, 0)])]);
