@@ -49,7 +49,6 @@ class KafkaClient {
         while (!retries || remainingRetries--) {
             foreach (brokerAddr; m_bootstrapBrokers) {
                 try {
-                    import std.conv;
                     auto tcpConn = connectTCP(brokerAddr.host, brokerAddr.port);
                     auto host = tcpConn.remoteAddress;
                     auto conn = new BrokerConnection(this, tcpConn);

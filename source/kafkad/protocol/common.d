@@ -20,7 +20,6 @@ package:
  
 immutable size_t ChunkSize = 4096; // TODO: configurability,document and describe the effects
 
-
 enum ApiKey : short {
     ProduceRequest = 0,
     FetchRequest = 1,
@@ -31,7 +30,6 @@ enum ApiKey : short {
     OffsetFetchRequest = 9,
     ConsumerMetadataRequest = 10
 }
-
 
 struct Broker {
     int id;

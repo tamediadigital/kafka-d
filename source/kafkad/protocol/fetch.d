@@ -143,6 +143,7 @@ struct FetchTopic {
     FetchPartitionRange partitions;
 }
 
+//TODO: sub-range skipping
 //TODO: possibly rename?
 struct FetchTopicRange {
     private {
