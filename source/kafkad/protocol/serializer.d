@@ -1,6 +1,7 @@
 ﻿module kafkad.protocol.serializer;
 
 import kafkad.protocol.common;
+import kafkad.config;
 
 /* serialize data up to ChunkSize, this is not zero-copy unfortunately, as vibe.d's drivers and kernel may do
  * buffering on their own, however, it should minimize the overhead of many, small write() calls to the driver */
@@ -103,15 +104,15 @@ struct Serializer {
     }
 
     // version 0
-    void fetchRequest_v0(int correlationId, string clientId, TopicPartitions[] topics) {
+    void fetchRequest_v0(int correlationId, string clientId, in KafkaConfiguration config, TopicPartitions[] topics) {
         auto size = 4 + 4 + 4 + arrayOverhead;
         foreach (ref t; topics) {
             size += stringSize(t.topic) + arrayOverhead + t.partitions.length * (4 + 8 + 4);
         }
         request(size, ApiKey.FetchRequest, 0, correlationId, clientId);
         serialize!int(-1); // ReplicaId
-        serialize!int(100); // MaxWaitTime, TODO: configurability, but now these values are same as defaults in librdkafka
-        serialize!int(1); // MinBytes
+        serialize!int(config.consumerMaxWaitTime); // MaxWaitTime
+        serialize!int(config.consumerMinBytes); // MinBytes
         arrayLength(topics.length);
         foreach (ref t; topics) {
             serialize(t.topic);
@@ -119,7 +120,7 @@ struct Serializer {
             foreach (ref p; t.partitions) {
                 serialize(p.partition);
                 serialize(p.offset);
-                serialize!int(1048576); // MaxBytes
+                serialize!int(config.consumerMaxBytes); // MaxBytes
             }
         }
         flush();

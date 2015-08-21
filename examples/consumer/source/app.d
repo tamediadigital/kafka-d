@@ -5,7 +5,11 @@ import kafkad.client;
 void main() {
     runTask({
         debug setLogLevel(LogLevel.debug_);
-        auto client = new KafkaClient([BrokerAddress("192.168.86.10", 9092)], "kafka-d");
+
+        KafkaConfiguration config;
+        // adjust config's properties if necessary
+        
+        auto client = new KafkaClient([BrokerAddress("192.168.86.10", 9092)], "kafka-d", config);
         while (!client.connect(1))
             writeln("Trying to bootstrap kafka client...");
 

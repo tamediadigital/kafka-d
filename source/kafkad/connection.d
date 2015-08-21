@@ -37,7 +37,7 @@ class BrokerConnection {
 
     auto getTopicRange(TopicPartitions[] topics) {
         //Review: correlation id
-        m_ser.fetchRequest_v0(0, m_client.clientId, topics);
+        m_ser.fetchRequest_v0(0, m_client.clientId, m_client.config, topics);
         int size, correlationId;
         m_des.getMessage(size, correlationId);
         m_des.beginMessage(size);

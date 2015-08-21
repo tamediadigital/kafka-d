@@ -6,6 +6,7 @@ import core.time;
 import std.exception;
 import vibe.core.core;
 import vibe.core.log;
+public import kafkad.config;
 
 /*
  * what is needed:
@@ -20,6 +21,7 @@ struct BrokerAddress {
 
 class KafkaClient {
     private {
+        KafkaConfiguration m_config;
         BrokerAddress[] m_bootstrapBrokers;
         string m_clientId;
         BrokerConnection[int] m_conns;
@@ -29,8 +31,10 @@ class KafkaClient {
     }
     
     import std.string, std.process;
-    this(BrokerAddress[] bootstrapBrokers, string clientId = format("kafka-d-%d",thisProcessID) )
+    this(BrokerAddress[] bootstrapBrokers, string clientId = format("kafka-d-%d",thisProcessID),
+        KafkaConfiguration config = KafkaConfiguration())
     {
+        m_config = config;
         enforce(bootstrapBrokers.length);
         m_bootstrapBrokers = bootstrapBrokers;
         m_clientId = clientId;
@@ -116,6 +120,8 @@ class KafkaClient {
 
     @property auto clientId() { return m_clientId; }
     @property auto clientId(string v) { return m_clientId = v; }
+
+    @property ref const(KafkaConfiguration) config() { return m_config; }
 
     @property auto connected() { return m_connected; }
 }
