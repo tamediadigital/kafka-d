@@ -2,6 +2,7 @@
 
 import kafkad.protocol.common;
 import kafkad.protocol.fetch;
+import kafkad.protocol.metadata;
 import kafkad.exception;
 
 // read data up to ChunkSize and then deserialize
