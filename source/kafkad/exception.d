@@ -21,6 +21,10 @@ class StreamException : Exception {
     mixin ExceptionCtorMixin;
 }
 
+class MetadataException : Exception {
+    mixin ExceptionCtorMixin;
+}
+
 /// Catches any exception in the expression and throws a new one specified by E and args
 /// Examples:
 /// -----

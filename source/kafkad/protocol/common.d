@@ -15,6 +15,7 @@ public import std.exception;
 public import std.traits;
 public import vibe.core.stream;
 public import kafkad.client;
+import kafkad.exception;
 
 package:
 
@@ -90,11 +91,28 @@ struct PartitionMetadata {
 
 struct TopicMetadata {
     short errorCode;
-    string name;
+    string topic;
     PartitionMetadata[] partitions;
+
+    PartitionMetadata findPartitionMetadata(int id) {
+        foreach (ref p; partitions) {
+            if (p.id == id)
+                return p;
+        }
+        import std.conv;
+        throw new MetadataException("Partition " ~ id.to!string ~ " for topic " ~ topic ~ " does not exist");
+    }
 }
 
 struct Metadata {
     Broker[] brokers;
     TopicMetadata[] topics;
+
+    TopicMetadata findTopicMetadata(string topic) {
+        foreach (ref t; topics) {
+            if (t.topic == topic)
+                return t;
+        }
+        throw new MetadataException("Topic " ~ topic ~ " does not exist");
+    }
 }

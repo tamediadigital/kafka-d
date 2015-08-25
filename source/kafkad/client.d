@@ -82,7 +82,7 @@ class KafkaClient {
                         }
                         logDebug("Topic list:");
                         foreach (ref t; m_metadata.topics) {
-                            logDebug("\tTopic: %s, partitions:", t.name);
+                            logDebug("\tTopic: %s, partitions:", t.topic);
                             foreach (ref p; t.partitions) {
                                 logDebug("\t\tPartition: %d, Leader ID: %d, Replicas: %s, In sync replicas: %s",
                                     p.id, p.leader, p.replicas, p.isr);
