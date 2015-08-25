@@ -105,7 +105,7 @@ struct Serializer {
     }
 
     // version 0
-    void fetchRequest_v0(int correlationId, string clientId, in KafkaConfiguration config, TopicPartitions[] topics) {
+    void fetchRequest_v0(int correlationId, string clientId, in Configuration config, TopicPartitions[] topics) {
         auto size = 4 + 4 + 4 + arrayOverhead;
         foreach (ref t; topics) {
             size += stringSize(t.topic) + arrayOverhead + t.partitions.length * (4 + 8 + 4);

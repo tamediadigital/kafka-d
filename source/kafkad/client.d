@@ -20,9 +20,9 @@ struct BrokerAddress {
     ushort port;
 }
 
-class KafkaClient {
+class Client {
     private {
-        KafkaConfiguration m_config;
+        Configuration m_config;
         BrokerAddress[] m_bootstrapBrokers;
         string m_clientId;
         BrokerConnection[NetworkAddress] m_conns;
@@ -33,7 +33,7 @@ class KafkaClient {
     
     import std.string, std.process;
     this(BrokerAddress[] bootstrapBrokers, string clientId = format("kafka-d-%d",thisProcessID),
-        KafkaConfiguration config = KafkaConfiguration())
+        Configuration config = Configuration())
     {
         m_config = config;
         enforce(bootstrapBrokers.length);
@@ -137,17 +137,17 @@ class KafkaClient {
     @property auto clientId() { return m_clientId; }
     @property auto clientId(string v) { return m_clientId = v; }
 
-    @property ref const(KafkaConfiguration) config() { return m_config; }
+    @property ref const(Configuration) config() { return m_config; }
 
     @property auto connected() { return m_connected; }
 }
 
-class KafkaConsumer {
+class Consumer {
     private {
-        KafkaClient m_client;
+        Client m_client;
         TopicPartitions[] m_topics;
     }
-    this(KafkaClient client, TopicPartitions[] topics) {
+    this(Client client, TopicPartitions[] topics) {
         m_client = client;
         m_topics = topics;
     }
@@ -161,7 +161,7 @@ class KafkaConsumer {
     }
 }
 
-enum KafkaCompression {
+enum Compression {
     None = 0,
     GZIP = 1,
     Snappy = 2

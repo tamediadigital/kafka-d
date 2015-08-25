@@ -6,14 +6,14 @@ void main() {
     runTask({
         debug setLogLevel(LogLevel.debug_);
 
-        KafkaConfiguration config;
+        Configuration config;
         // adjust config's properties if necessary
         
-        auto client = new KafkaClient([BrokerAddress("192.168.86.10", 9092)], "kafka-d", config);
+        auto client = new Client([BrokerAddress("192.168.86.10", 9092)], "kafka-d", config);
         while (!client.connect())
             writeln("Trying to bootstrap kafka client...");
 
-        auto consumer = new KafkaConsumer(client, [TopicPartitions("kafkad", [PartitionOffset(0, 0)])]);
+        auto consumer = new Consumer(client, [TopicPartitions("kafkad", [PartitionOffset(0, 0)])]);
         auto topics = consumer.consume();
 
         foreach (ref t; topics) {

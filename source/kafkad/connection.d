@@ -11,7 +11,7 @@ package:
 
 class BrokerConnection {
     private {
-        KafkaClient m_client;
+        Client m_client;
         TCPConnection m_conn;
         Serializer m_ser;
         Deserializer m_des;
@@ -23,7 +23,7 @@ class BrokerConnection {
         return m_conn.remoteAddress.rethrow!ConnectionException("Could not get connection's remote address");
     }
 
-    this(KafkaClient client, TCPConnection conn) {
+    this(Client client, TCPConnection conn) {
         m_client = client;
         m_conn = conn;
         m_ser = Serializer(conn);
