@@ -31,7 +31,9 @@ class Client {
         Metadata m_metadata;
         bool m_connected;
     }
-    
+
+    enum __isWeakIsolatedType = true;
+
     import std.string, std.process;
     this(BrokerAddress[] bootstrapBrokers, string clientId = format("kafka-d-%d",thisProcessID),
         Configuration config = Configuration())
@@ -141,6 +143,10 @@ class Client {
     @property ref const(Configuration) config() { return m_config; }
 
     @property auto connected() { return m_connected; }
+
+package: // functions below are used by the consumer and producer classes
+
+
 }
 
 enum Compression {

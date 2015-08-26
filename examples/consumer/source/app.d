@@ -9,11 +9,21 @@ void main() {
         Configuration config;
         // adjust config's properties if necessary
         
-        auto client = new Client([BrokerAddress("192.168.86.10", 9092)], "kafka-d", config);
+        Client client = new Client([BrokerAddress("192.168.86.10", 9092)], "kafka-d", config);
         while (!client.connect())
             writeln("Trying to bootstrap kafka client...");
 
-        auto consumer = new Consumer(client, [TopicPartitions("kafkad", [PartitionOffset(0, 0)])]);
+        //
+            runWorkerTask((Client client) {
+                auto consumer = new Consumer(client, "kafkad", 0, 0));
+                for (;;) {
+                    auto msg = consumer.getMessage();
+                    // use msg
+                }
+            }, client);
+        //
+
+            /+
         auto topics = consumer.consume();
 
         foreach (ref t; topics) {
@@ -28,7 +38,7 @@ void main() {
                     writeln;
                 }
             }
-        }
+        }+/
 
     });
     runEventLoop();
