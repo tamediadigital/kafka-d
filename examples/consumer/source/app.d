@@ -15,10 +15,12 @@ void main() {
 
         //
             runWorkerTask((Client client) {
-                auto consumer = new Consumer(client, "kafkad", 0, 0));
+                Consumer consumer = new Consumer(client, "kafkad", 0, 0);
                 for (;;) {
-                    auto msg = consumer.getMessage();
-                    // use msg
+                    Message msg = consumer.getMessage();
+                    long offset = msg.offset;
+                    ubyte[] key = msg.key;
+                    ubyte[] value = msg.value;
                 }
             }, client);
         //

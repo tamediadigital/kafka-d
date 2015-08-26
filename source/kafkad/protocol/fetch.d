@@ -186,3 +186,4 @@ struct TopicRange {
         m_front.partitions = PartitionRange(m_des, numpartitions);
     }
 }
+

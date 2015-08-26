@@ -146,7 +146,9 @@ class Client {
 
 package: // functions below are used by the consumer and producer classes
 
-
+    Message getMessage(Consumer consumer) {
+        return Message();
+    }
 }
 
 enum Compression {

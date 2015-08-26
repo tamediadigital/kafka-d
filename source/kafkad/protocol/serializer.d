@@ -48,7 +48,7 @@ struct Serializer {
         p = cast(ubyte*)pt;
     }
 
-    private void serializeSlice(ubyte[] s) {
+    private void serializeSlice(const(ubyte)[] s) {
         auto slice = s;
         if (slice.length > ChunkSize) {
             if (p - chunk)
@@ -69,7 +69,7 @@ struct Serializer {
         serializeSlice(cast(ubyte[])s);
     }
 
-    void serialize(ubyte[] s) {
+    void serialize(const(ubyte)[] s) {
         enforce(s.length <= int.max, "Byte array must not be larger than 4 GB"); // just in case
         serialize(cast(int)s.length);
         serializeSlice(s);
@@ -101,7 +101,6 @@ struct Serializer {
         arrayLength(topics.length);
         foreach (t; topics)
             serialize(t);
-        flush();
     }
 
     // version 0
@@ -124,6 +123,5 @@ struct Serializer {
                 serialize!int(config.consumerMaxBytes); // MaxBytes
             }
         }
-        flush();
     }
 }
