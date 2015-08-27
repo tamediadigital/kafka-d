@@ -5,6 +5,8 @@ import kafkad.connection;
 import kafkad.protocol.fetch;
 import vibe.core.sync;
 import std.container.dlist;
+import std.container.rbtree;
+import std.algorithm;
 
 struct Message {
     long offset;
@@ -17,17 +19,46 @@ struct QueueBuffer {
     size_t filled;
 }
 
+// queues must be always sorted by the topic
+//alias QueueList = RedBlackTree!(Queue, "a.topic < b.topic");
+
+alias QueuePartitions = RedBlackTree!(Queue, "a.partition < b.partition");
+alias QueueTopics = RedBlackTree!(QueueTopic, "a.topic < b.topic");
+
+class QueueTopic {
+    string topic;
+    size_t readyPartitions;
+    QueuePartitions queues;
+
+    auto findQueue(int partition) {
+        auto r = queues[].find!((a, b) => a.partition == b)(partition);
+        assert(!r.empty);
+        return r.front;
+    }
+}
+
 class QueueGroup {
     private {
-        DList!Queue m_queues;
+        QueueTopics m_queueTopics;
         TaskMutex m_mutex;
         TaskCondition m_freeCondition; // notified when there are queues with free buffers
+        size_t m_freeQueues;
     }
 
-    void addQueue(Queue queue) {
-        synchronized (m_mutex) {
-            m_queues.insertBack(queue);
-        }
+    this() {
+        m_queueTopics = new QueueTopics();
+        m_mutex = new TaskMutex();
+        m_freeCondition = new TaskCondition(m_mutex);
+    }
+
+    @property auto queueTopics() { return m_queueTopics; }
+    @property auto mutex() { return m_mutex; }
+    @property auto freeCondition() { return m_freeCondition; }
+
+    auto findTopic(string topic) {
+        auto r = m_queueTopics[].find!((a, b) => a.topic == b)(topic);
+        assert(!r.empty);
+        return r.front;
     }
 
     void notifyQueuesHaveFreeBuffers() {
@@ -42,9 +73,14 @@ class Queue {
         TaskMutex m_mutex;
         TaskCondition m_filledCondition;
         QueueGroup m_group;
+        bool m_fetchPending;
     }
 
-    package bool m_fetchPending; // this is updated in the fetch task
+    int partition;
+
+    // this is updated also in the fetch task
+    bool fetchPending() { return m_fetchPending; }
+    bool fetchPending(bool v) { return m_fetchPending = v; }
 
     this(in Configuration config, QueueGroup group) {
         import std.algorithm : max;
@@ -58,15 +94,27 @@ class Queue {
         m_mutex = new TaskMutex();
         m_filledCondition = new TaskCondition(m_mutex);
         m_group = group;
+        m_fetchPending = false;
     }
 
     @property auto mutex() { return m_mutex; }
     @property auto filledCondition() { return m_filledCondition; }
 
-    auto getFreeBuffer() {
+    bool hasFreeBuffer() {
+        return !m_fetchPending && !m_freeBuffers.empty;
+    }
+
+    auto getBufferToFill() {
         auto qbuf = m_freeBuffers.front();
         m_freeBuffers.removeFront();
         return qbuf;
+    }
+
+    void returnFilledBuffer(QueueBuffer* buf) {
+        synchronized (m_mutex) {
+            m_filledBuffers.insertBack(buf);
+            m_filledCondition.notify();
+        }
     }
 
     QueueBuffer* waitForFilledBuffer() {
@@ -76,7 +124,7 @@ class Queue {
                 m_freeBuffers.insertBack(m_lastBuffer);
                 // notify the fetch task that there are buffer to be filled in
                 // the fetch task will then make a batch request for all queues with free buffers
-                // do not notify the task if there is a pending request (e.g. without a response)
+                // do not notify the task if there is a pending request for this queue (e.g. without a response)
                 if (!m_fetchPending)
                     m_group.notifyQueuesHaveFreeBuffers();
             }

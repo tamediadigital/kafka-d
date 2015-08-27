@@ -104,7 +104,7 @@ struct Deserializer {
         s = cast(T)v;
     }
 
-    private void deserializeSlice(ubyte[] s) {
+    void deserializeSlice(ubyte[] s) {
         auto slice = s;
         auto tail = min(slice.length, end - p);
         core.stdc.string.memcpy(slice.ptr, p, tail);

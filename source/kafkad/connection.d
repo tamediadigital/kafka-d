@@ -20,6 +20,14 @@ struct ConnectionConsumer {
     int offset;
 }
 
+import std.container.dlist;
+
+enum RequestType { Fetch };
+
+struct Request {
+    RequestType type;
+}
+
 class BrokerConnection {
     private {
         Client m_client;
@@ -33,6 +41,8 @@ class BrokerConnection {
         TopicPartitions[] m_consumerTopics;
         size_t m_consumersReady;
         TaskCondition m_cond;
+        QueueGroup m_queueGroup;
+        DList!Request m_requests;
     }
 
     void rebuildConsumerTopics() {
@@ -65,18 +75,83 @@ class BrokerConnection {
         int size, correlationId;
         for (;;) {
             // send requests
+            synchronized (m_queueGroup.mutex) {
+                foreach (ref t; m_queueGroup.queueTopics) {
+                }
+            }
             synchronized (m_cond.mutex) {
                 while (!m_consumersReady)
                     m_cond.wait();
                 // send
-                m_ser.fetchRequest_v0(1, m_client.clientId, m_client.config, m_consumerTopics);
+                //m_ser.fetchRequest_v0(1, m_client.clientId, m_client.config, m_consumerTopics);
             }
 
+            // add request for each fetch, TODO: optimize allocation to to freelist
+            auto req = Request(RequestType.Fetch);
+            synchronized (this)
+                m_requests.insertBack(req);
+        }
+    }
+
+    void receiverMain() {
+        int size, correlationId;
+        for (;;) {
             m_des.getMessage(size, correlationId);
-            auto ptask = correlationId in m_correlations;
-            if (!ptask)
-                break; // TODO: close connection
             m_des.beginMessage(size);
+
+            // requests are always processed in order on a single TCP connection,
+            // and we rely on that order rather than on correlationId
+            // requests are pushed to the request queue by the consumer and producer
+            // and they are popped here in the order they were sent
+            Request req = void;
+            synchronized (this) {
+                assert(!m_requests.empty);
+                req = m_requests.front;
+                m_requests.removeFront();
+            }
+
+            switch (req.type) {
+                case RequestType.Fetch:
+                    // parse the fetch response, move returned messages to the correct queues,
+                    // and handle partition errors if needed
+                    int numtopics;
+                    m_des.deserialize(numtopics);
+                    assert(numtopics > 0);
+                    foreach (nt; 0 .. numtopics) {
+                        string topic;
+                        int numpartitions;
+                        m_des.deserialize(topic); // TODO: preallocate string memory
+                        m_des.deserialize(numpartitions);
+                        assert(numpartitions > 0);
+
+                        QueueTopic queueTopic = m_queueGroup.findTopic(topic);
+
+                        foreach (np; 0 .. numpartitions) {
+                            static struct PartitionInfo {
+                                int partition;
+                                short errorCode;
+                                long endOffset;
+                                int messageSetSize;
+                            }
+                            PartitionInfo pi;
+                            m_des.deserialize(pi);
+                            // TODO: handle errorCode
+                            enforce(pi.messageSetSize <= m_client.config.consumerMaxBytes, "MessageSet is too big to fit into a buffer");
+
+                            // find queue by topic and partition number
+                            Queue queue = queueTopic.findQueue(pi.partition);
+                            auto qbuf = queue.getBufferToFill();
+
+                            // copy message set to the buffer
+                            m_des.deserializeSlice(qbuf.buffer[0 .. pi.messageSetSize]);
+                            qbuf.filled = pi.messageSetSize;
+
+                            queue.returnFilledBuffer(qbuf);
+                        }
+                    }
+                    break;
+                default: assert(0); // FIXME
+            }
         }
     }
 
