@@ -100,7 +100,7 @@ class BrokerConnection {
             m_des.beginMessage(size);
 
             // requests are always processed in order on a single TCP connection,
-            // and we rely on that order rather than on correlationId
+            // and we rely on that order rather than on the correlationId
             // requests are pushed to the request queue by the consumer and producer
             // and they are popped here in the order they were sent
             Request req = void;

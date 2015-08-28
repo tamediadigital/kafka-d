@@ -144,6 +144,23 @@ class Client {
 
     @property auto connected() { return m_connected; }
 
+    string[] getTopics() {
+        string[] topics;
+        foreach (ref t; m_metadata.topics) {
+            topics ~= t.topic;
+        }
+        return topics;
+    }
+
+    int[] getPartitions(string topic) {
+        int[] partitions;
+        auto tm = m_metadata.findTopicMetadata(topic);
+        foreach (ref p; tm.partitions) {
+            partitions ~= p.id;
+        }
+        return partitions;
+    }
+
 package: // functions below are used by the consumer and producer classes
 
     Message getMessage(Consumer consumer) {
