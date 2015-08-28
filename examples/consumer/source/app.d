@@ -14,15 +14,18 @@ void main() {
             writeln("Trying to bootstrap kafka client...");
 
         //
-            runWorkerTask((Client client) {
-                Consumer consumer = new Consumer(client, "kafkad", 0, 0);
-                for (;;) {
-                    Message msg = consumer.getMessage();
-                    long offset = msg.offset;
-                    ubyte[] key = msg.key;
-                    ubyte[] value = msg.value;
-                }
-            }, client);
+        runWorkerTask((Client client) {
+            Consumer consumer = new Consumer(client, "kafkad", 0, 0);
+            for (;;) {
+                Message msg = consumer.getMessage();
+                
+                // if the payload consists of UTF-8 characters then it may be safely cast to a string
+                string keyStr = key ? cast(string)key : ""; // key may be null
+                string valueStr = value ? cast(string)value : ""; // value may be null
+                
+                writefln("Message, offset %d, key: %s, value: %s", offset, keyStr, valueStr);
+            }
+        }, client);
         //
 
             /+
