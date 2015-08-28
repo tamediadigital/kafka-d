@@ -190,6 +190,7 @@ class Consumer {
     Message getMessage() {
         if (!m_currentBuffer)
             m_currentBuffer = m_queue.waitForFilledBuffer();
+    processBuffer:
         if (m_currentBuffer.messageSetSize > 12 /* Offset + Message Size */) {
             import std.bitmanip, std.digest.crc;
 
@@ -198,11 +199,11 @@ class Consumer {
             m_currentBuffer.p += 12;
             m_currentBuffer.messageSetSize -= 12;
             if (m_currentBuffer.messageSetSize >= messageSize) {
+                // we got full message here
                 scope (exit) {
                     m_currentBuffer.p += messageSize;
                     m_currentBuffer.messageSetSize -= messageSize;
                 }
-                // we got full message here
                 ubyte[4] messageCrc = m_currentBuffer.p[0 .. 4];
                 // check remainder bytes with CRC32 and compare
                 ubyte[4] computedCrc = crc32Of(m_currentBuffer.p[4 .. messageSize]);
@@ -232,18 +233,20 @@ class Consumer {
                 byte compression = attributes & 3;
                 if (compression != 0) {
                     // handle compression, this must be the only message in a message set
+                    assert(0); // FIXME
                 } else {
                     // no compression, just return the message
                     return Message(offset, key, value);
                 }
             } else {
-                // this is partial message, skip it
+                // this is the last, partial message, skip it
+                m_currentBuffer = m_queue.waitForFilledBuffer();
+                goto processBuffer;
             }
         } else {
-            // no more messages
+            // no more messages, get next buffer
+            m_currentBuffer = m_queue.waitForFilledBuffer();
+            goto processBuffer;
         }
-
-        // TODO: parse qbuf data, check crc, and setup key and value slices FOR EACH MESSAGE, also handle last partial msg
-        return Message();
     }
 }
