@@ -25,6 +25,10 @@ class MetadataException : Exception {
     mixin ExceptionCtorMixin;
 }
 
+class CrcException : Exception {
+    mixin ExceptionCtorMixin;
+}
+
 /// Catches any exception in the expression and throws a new one specified by E and args
 /// Examples:
 /// -----

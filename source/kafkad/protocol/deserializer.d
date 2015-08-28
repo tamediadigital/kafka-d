@@ -67,7 +67,7 @@ struct Deserializer {
         remaining = 8;
         check(8);
         deserialize(size);
-        deserialize(correlationId); // todo: skip unknown correlationID messages
+        deserialize(correlationId);
         size -= 4; // subtract correlationId overhead
     }
 

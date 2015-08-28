@@ -86,7 +86,7 @@ class BrokerConnection {
                 //m_ser.fetchRequest_v0(1, m_client.clientId, m_client.config, m_consumerTopics);
             }
 
-            // add request for each fetch, TODO: optimize allocation to to freelist
+            // add request for each fetch, TODO: optimize allocation to the freelist
             auto req = Request(RequestType.Fetch);
             synchronized (this)
                 m_requests.insertBack(req);
@@ -144,7 +144,8 @@ class BrokerConnection {
 
                             // copy message set to the buffer
                             m_des.deserializeSlice(qbuf.buffer[0 .. pi.messageSetSize]);
-                            qbuf.filled = pi.messageSetSize;
+                            qbuf.p = qbuf.buffer;
+                            qbuf.messageSetSize = pi.messageSetSize;
 
                             queue.returnFilledBuffer(qbuf);
                         }

@@ -2,11 +2,14 @@
 
 import kafkad.client;
 import kafkad.connection;
+import kafkad.exception;
 import kafkad.protocol.fetch;
 import vibe.core.sync;
 import std.container.dlist;
 import std.container.rbtree;
 import std.algorithm;
+import std.exception;
+import core.memory;
 
 struct Message {
     long offset;
@@ -15,8 +18,12 @@ struct Message {
 }
 
 struct QueueBuffer {
-    ubyte[] buffer;
-    size_t filled;
+    ubyte* buffer, p;
+    size_t messageSetSize;
+
+    this(size_t size) {
+        buffer = cast(ubyte*)enforce(GC.malloc(size, GC.BlkAttr.NO_SCAN));
+    }
 }
 
 // queues must be always sorted by the topic
@@ -86,8 +93,7 @@ class Queue {
         import std.algorithm : max;
         auto nbufs = max(2, config.consumerQueueBuffers); // at least 2
         foreach (n; 0 .. nbufs) {
-            auto buf = new ubyte[config.consumerMaxBytes];
-            auto qbuf = new QueueBuffer(buf, 0);
+            auto qbuf = new QueueBuffer(config.consumerMaxBytes);
             m_freeBuffers.insertBack(qbuf);
         }
         m_lastBuffer = null;
@@ -124,7 +130,7 @@ class Queue {
                 m_freeBuffers.insertBack(m_lastBuffer);
                 // notify the fetch task that there are buffer to be filled in
                 // the fetch task will then make a batch request for all queues with free buffers
-                // do not notify the task if there is a pending request for this queue (e.g. without a response)
+                // do not notify the task if there is a pending request for this queue (e.g. without a response yet)
                 if (!m_fetchPending)
                     m_group.notifyQueuesHaveFreeBuffers();
             }
@@ -155,6 +161,7 @@ class Consumer {
         size_t m_filled;
         TaskCondition m_cond;
         Queue m_queue;
+        QueueBuffer* m_currentBuffer;
     }
 
     package {
@@ -168,7 +175,8 @@ class Consumer {
         m_partition = partition;
         m_offset = offset;
         m_queue = new Queue(client.config);
-        m_cond = new TaskCondition(new TaskMutex);
+//        m_cond = new TaskCondition(new TaskMutex);
+        m_currentBuffer = null;
     }
 
     /// Consumes message from the selected topics and partitions
@@ -180,7 +188,61 @@ class Consumer {
     }+/
 
     Message getMessage() {
-        QueueBuffer* qbuf = m_queue.waitForFilledBuffer();
+        if (!m_currentBuffer)
+            m_currentBuffer = m_queue.waitForFilledBuffer();
+        if (m_currentBuffer.messageSetSize > 12 /* Offset + Message Size */) {
+            import std.bitmanip, std.digest.crc;
+
+            long offset = bigEndianToNative!long(m_currentBuffer.p[0 .. 8]);
+            int messageSize = bigEndianToNative!int(m_currentBuffer.p[8 .. 12]);
+            m_currentBuffer.p += 12;
+            m_currentBuffer.messageSetSize -= 12;
+            if (m_currentBuffer.messageSetSize >= messageSize) {
+                scope (exit) {
+                    m_currentBuffer.p += messageSize;
+                    m_currentBuffer.messageSetSize -= messageSize;
+                }
+                // we got full message here
+                ubyte[4] messageCrc = m_currentBuffer.p[0 .. 4];
+                // check remainder bytes with CRC32 and compare
+                ubyte[4] computedCrc = crc32Of(m_currentBuffer.p[4 .. messageSize]);
+                if (computedCrc != messageCrc) {
+                    // handle CRC error
+                    throw new CrcException("Invalid message checksum");
+                }
+                byte magicByte = m_currentBuffer.p[4];
+                enforce(magicByte == 0);
+                byte attributes = m_currentBuffer.p[5];
+                int keyLen = bigEndianToNative!int(m_currentBuffer.p[6 .. 10]);
+                ubyte[] key = null;
+                if (keyLen >= 0) {
+                    // 14 = crc(4) + magicByte(1) + attributes(1) + keyLen(4) + valueLen(4)
+                    enforce(keyLen <= messageSize - 14);
+                    key = m_currentBuffer.p[10 .. 10 + keyLen];
+                }
+                auto pValue = m_currentBuffer.p + 10 + keyLen;
+                int valueLen = bigEndianToNative!int(pValue[0 .. 4]);
+                ubyte[] value = null;
+                if (valueLen >= 0) {
+                    enforce(valueLen <= messageSize - 14 - key.length);
+                    pValue += 4;
+                    value = pValue[0 .. valueLen];
+                }
+
+                byte compression = attributes & 3;
+                if (compression != 0) {
+                    // handle compression, this must be the only message in a message set
+                } else {
+                    // no compression, just return the message
+                    return Message(offset, key, value);
+                }
+            } else {
+                // this is partial message, skip it
+            }
+        } else {
+            // no more messages
+        }
+
         // TODO: parse qbuf data, check crc, and setup key and value slices FOR EACH MESSAGE, also handle last partial msg
         return Message();
     }
