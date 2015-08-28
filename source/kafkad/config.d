@@ -1,6 +1,10 @@
 ﻿module kafkad.config;
 
 struct Configuration {
+    /// size of the serializer buffer
+    int serializerChunkSize = 4096;
+    /// size of the deserializer buffer
+    int deserializerChunkSize = 4096;
     /// maximum time to wait for messages in ms
     int consumerMaxWaitTime = 100;
     /// minimum number of bytes to accumulate on the server before returning messages

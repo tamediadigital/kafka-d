@@ -11,13 +11,15 @@ struct Serializer {
     private {
         ubyte* chunk, p, end;
         Stream stream;
+        size_t chunkSize;
     }
 
-    this(Stream stream) {
-        chunk = cast(ubyte*)enforce(GC.malloc(ChunkSize, GC.BlkAttr.NO_SCAN));
+    this(Stream stream, size_t chunkSize) {
+        chunk = cast(ubyte*)enforce(GC.malloc(chunkSize, GC.BlkAttr.NO_SCAN));
         p = chunk;
-        end = chunk + ChunkSize;
+        end = chunk + chunkSize;
         this.stream = stream;
+        this.chunkSize = chunkSize;
     }
 
     void flush() {
@@ -50,12 +52,12 @@ struct Serializer {
 
     private void serializeSlice(const(ubyte)[] s) {
         auto slice = s;
-        if (slice.length > ChunkSize) {
+        if (slice.length > chunkSize) {
             if (p - chunk)
                 flush();
-            while (slice.length > ChunkSize) {
-                stream.write(slice[0 .. ChunkSize]).rethrow!StreamException("Serializer.serializeSlice() failed");
-                slice = slice[ChunkSize .. $];
+            while (slice.length > chunkSize) {
+                stream.write(slice[0 .. chunkSize]).rethrow!StreamException("Serializer.serializeSlice() failed");
+                slice = slice[chunkSize .. $];
             }
         }
         check(slice.length);

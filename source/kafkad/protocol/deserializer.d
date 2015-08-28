@@ -12,13 +12,15 @@ struct Deserializer {
         ubyte* chunk, p, end;
         Stream stream;
         size_t remaining; // bytes remaining in current message
+        size_t chunkSize;
     }
     
-    this(Stream stream) {
-        chunk = cast(ubyte*)enforce(GC.malloc(ChunkSize, GC.BlkAttr.NO_SCAN));
+    this(Stream stream, size_t chunkSize) {
+        chunk = cast(ubyte*)enforce(GC.malloc(chunkSize, GC.BlkAttr.NO_SCAN));
         p = chunk;
         end = chunk;
         this.stream = stream;
+        this.chunkSize = chunkSize;
     }
 
     // must be called before each message (needed for correct chunk processing)
@@ -33,10 +35,10 @@ struct Deserializer {
             p += size;
         } else {
             size -= tail;
-            end = chunk + size % ChunkSize;
+            end = chunk + size % chunkSize;
             p = end;
             while (size) {
-                auto toRead = min(size, ChunkSize);
+                auto toRead = min(size, chunkSize);
                 stream.read(chunk[0 .. toRead]).rethrow!StreamException("Deserializer.skipBytes() failed");
                 size -= toRead;
             }
@@ -46,11 +48,11 @@ struct Deserializer {
     void read() {
         assert(remaining);
         auto tail = end - p;
-        if (tail && tail < ChunkSize)
+        if (tail && tail < chunkSize)
             core.stdc.string.memmove(chunk, p, tail);
         // read up to remaining if it's smaller than chunk size, it will prevent blocking if read buffer is empty
         // consider: reading up to vibe's leastSize();
-        auto toRead = min(ChunkSize, tail + remaining);
+        auto toRead = min(chunkSize, tail + remaining);
         stream.read(chunk[tail .. toRead]).rethrow!StreamException("Deserializer.read() failed");
         p = chunk;
         end = chunk + toRead;
@@ -73,7 +75,7 @@ struct Deserializer {
 
     // returns chunk slice up to remaining bytes
     ubyte[] getChunk(size_t needed) {
-        needed = min(needed, ChunkSize);
+        needed = min(needed, chunkSize);
         check(needed);
         auto slice = p[0 .. needed];
         p += needed;

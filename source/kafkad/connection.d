@@ -65,8 +65,8 @@ class BrokerConnection {
     this(Client client, TCPConnection conn) {
         m_client = client;
         m_conn = conn;
-        m_ser = Serializer(conn);
-        m_des = Deserializer(conn);
+        m_ser = Serializer(conn, client.config.serializerChunkSize);
+        m_des = Deserializer(conn, client.config.deserializerChunkSize);
         m_cond = new TaskCondition(new TaskMutex);
         m_workerTask = runTask(&workerMain);
     }
