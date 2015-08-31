@@ -32,16 +32,16 @@ struct GroupTopic {
     }
 }
 
-// This represents group of queues for a connection. Queues belong to the consumers and are
-// connected to the groups belonging to the connections. Groups build internal data structure
-// which allow to perform fast fetch requests for multiple topics and partitions.
-// Batching (or bundling) of such requests is very desirable feature, because requests on the
+// This represents group of consumer queues for a connection. These queues belong to the consumers
+// and are connected to the groups belonging to the connections. Groups build internal data structure
+// which allow to perform fast batched fetch requests for multiple topics and partitions.
+// Such batching (or bundling) of the requests is very desirable feature, because requests on the
 // broker are processed serially, one by one and each fetch request specifies a timeout.
 // If many such requests are issued, each one may wait up to config.consumerMaxWaitTime and
-// thus, may block the others waiting in the request buffer. For example, if maximum wait time
-// would me 100 ms, and there will be 10 consumers, then without fetch request bundling, it may
-// happen that the last consumer will be waiting 1 second for the next buffer. In general view,
-// this can significantly reduce performance.
+// thus, may block the others waiting in the request queue. For example, if maximum wait time
+// will me 100 ms, and there will be 10 consumers, then without fetch request bundling, it may
+// happen that the last consumer will be waiting for 1 second for the next buffer. In general view,
+// many separate fetch requests can significantly reduce performance.
 class QueueGroup {
     private {
         GroupTopic*[string] m_groupTopics;
