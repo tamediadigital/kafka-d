@@ -16,6 +16,9 @@ struct BrokerAddress {
     ushort port;
 }
 
+/// The client acts as a router between brokers, consumers and producers. Consumers and producers
+/// connect to the client and it handles connections to the brokers for them. It transparently handles
+/// connection failures, leader switches and translates topic/partitions to respective broker connections.
 class Client {
     enum __isWeakIsolatedType = true; // needed to pass this type between vibe.d's tasks
     private {
