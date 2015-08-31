@@ -1,6 +1,12 @@
 ﻿module kafkad.config;
 
 struct Configuration {
+    /// maximum length of a topic name in UTF-8 code units
+    int maxTopicNameLength = 1024;
+    /// number of retries to perform when waiting for leader election, 0 = retry infinitely
+    int leaderElectionRetryCount = 3;
+    /// time to wait between retries when waiting for leader election
+    int leaderElectionRetryTimeout = 1000;
     /// size of the serializer buffer
     int serializerChunkSize = 4096;
     /// size of the deserializer buffer

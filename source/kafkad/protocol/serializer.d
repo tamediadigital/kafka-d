@@ -3,6 +3,7 @@
 import kafkad.protocol.common;
 import kafkad.config;
 import kafkad.exception;
+import kafkad.consumer.group;
 
 /* serialize data up to ChunkSize, this is not zero-copy unfortunately, as vibe.d's drivers and kernel may do
  * buffering on their own, however, it should minimize the overhead of many, small write() calls to the driver */
@@ -105,27 +106,34 @@ struct Serializer {
             serialize(t);
     }
 
-    import kafkad.consumer;
-
     // version 0
-    void fetchRequest_v0(int correlationId, string clientId, in Configuration config, QueueTopics topics) {
+    void fetchRequest_v0(int correlationId, string clientId, in Configuration config, QueueGroup queueGroup) {
+        size_t topics = 0;
         auto size = 4 + 4 + 4 + arrayOverhead;
-        foreach (ref t; topics) {
-            size += stringSize(t.topic) + arrayOverhead + t.partitions.length * (4 + 8 + 4);
+        GroupTopic* t = queueGroup.fetchRequestTopicsFront;
+        while (t) {
+            size += stringSize(t.topic) + arrayOverhead + t.partitionsInFetchRequest * (4 + 8 + 4);
+            ++topics;
+            t = t.next;
         }
         request(size, ApiKey.FetchRequest, 0, correlationId, clientId);
         serialize!int(-1); // ReplicaId
         serialize!int(config.consumerMaxWaitTime); // MaxWaitTime
         serialize!int(config.consumerMinBytes); // MinBytes
-        arrayLength(topics.length);
-        foreach (ref t; topics) {
+        arrayLength(topics);
+        t = queueGroup.fetchRequestTopicsFront;
+        while (t) {
             serialize(t.topic);
-            arrayLength(t.partitions.length);
-            foreach (ref p; t.partitions) {
-                serialize(p.partition);
-                serialize(p.offset);
+            arrayLength(t.partitionsInFetchRequest);
+            GroupPartition* p = t.fetchRequestPartitionsFront;
+            while (p) {
+                serialize(p.queue.consumer.partition);
+                //serialize(p.consumer.offset);
+                serialize!long(0);//FIXME
                 serialize!int(config.consumerMaxBytes); // MaxBytes
+                p = p.next;
             }
+            t = t.next;
         }
     }
 }

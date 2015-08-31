@@ -1,7 +1,6 @@
 ﻿module kafkad.protocol.deserializer;
 
 import kafkad.protocol.common;
-import kafkad.protocol.fetch;
 import kafkad.protocol.metadata;
 import kafkad.exception;
 
@@ -26,6 +25,11 @@ struct Deserializer {
     // must be called before each message (needed for correct chunk processing)
     void beginMessage(size_t size) {
         remaining = size;
+    }
+
+    void endMessage() {
+        if (remaining)
+            skipBytes(remaining);
     }
 
     // todo: test
@@ -107,16 +111,23 @@ struct Deserializer {
     }
 
     void deserializeSlice(ubyte[] s) {
-        auto slice = s;
-        auto tail = min(slice.length, end - p);
-        core.stdc.string.memcpy(slice.ptr, p, tail);
-        p += tail;
-        slice = slice[tail .. $];
-        while (slice.length) {
-            read();
-            auto cnt = end - p;
-            core.stdc.string.memcpy(slice.ptr, p, cnt);
-            slice = slice[cnt .. $];
+        auto tail = end - p; // amount available in the chunk
+        if (s.length <= tail) {
+            core.stdc.string.memcpy(s.ptr, p, s.length);
+            p += s.length;
+        } else {
+            core.stdc.string.memcpy(s.ptr, p, tail);
+            p += tail;
+            s = s[tail .. $];
+            if (s.length >= chunkSize) {
+                stream.read(s).rethrow!StreamException("Deserializer.deserializeSlice() failed");
+                remaining -= s.length;
+            } else {
+                read();
+                assert(end - p >= s.length);
+                core.stdc.string.memcpy(s.ptr, p, s.length);
+				p += s.length;
+            }
         }
     }
 
@@ -162,11 +173,5 @@ struct Deserializer {
         Metadata r;
         deserialize(r);
         return r;
-    }
-
-    auto fetchResponse_v0() {
-        int numtopics;
-        deserialize(numtopics);
-        return TopicRange(&this, numtopics);
     }
 }

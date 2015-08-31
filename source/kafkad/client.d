@@ -4,17 +4,12 @@ import kafkad.connection;
 import kafkad.protocol;
 import kafkad.exception;
 import core.time;
+import std.container.dlist;
 import std.exception;
 import vibe.core.core;
 import vibe.core.log;
 public import kafkad.config;
-public import kafkad.consumer;
-
-/*
- * what is needed:
- * - broker list for bootstrap
- * - client id
- */
+public import kafkad.consumer.consumer;
 
 struct BrokerAddress {
     string host;
@@ -22,17 +17,28 @@ struct BrokerAddress {
 }
 
 class Client {
+    enum __isWeakIsolatedType = true; // needed to pass this type between vibe.d's tasks
     private {
         Configuration m_config;
         BrokerAddress[] m_bootstrapBrokers;
         string m_clientId;
-        package /* FIXME */ BrokerConnection[NetworkAddress] m_conns;
+        BrokerConnection[NetworkAddress] m_conns;
         NetworkAddress[int] m_hostCache; // broker id to NetworkAddress cache
         Metadata m_metadata;
         bool m_connected;
+
+        DList!Consumer m_consumers, m_brokerlessConsumers;
+        TaskMutex m_mutex;
+        TaskCondition m_brokerlessConsumersEmpty;
+        Task m_connectionManager;
     }
 
-    enum __isWeakIsolatedType = true;
+    @property auto clientId() { return m_clientId; }
+    @property auto clientId(string v) { return m_clientId = v; }
+
+    @property ref const(Configuration) config() { return m_config; }
+
+    @property auto connected() { return m_connected; }
 
     import std.string, std.process;
     this(BrokerAddress[] bootstrapBrokers, string clientId = format("kafka-d-%d",thisProcessID),
@@ -43,9 +49,12 @@ class Client {
         m_bootstrapBrokers = bootstrapBrokers;
         m_clientId = clientId;
         m_connected = false;
+        m_mutex = new TaskMutex();
+        m_brokerlessConsumersEmpty = new TaskCondition(m_mutex);
+        m_connectionManager = runTask(&connectionManagerMain);
     }
 
-    /// Bootstraps client into the cluser
+    /// Bootstraps client into the cluster
     /// Returns: true if connected, false if all retries failed
     bool connect() {
         if (m_connected)
@@ -124,7 +133,6 @@ class Client {
         return *pconn;
     }
 
-    // TODO: handle stale metadata
     private auto getConn(int id) {
         assert(id in m_hostCache);
         auto netAddr = m_hostCache[id];
@@ -132,17 +140,6 @@ class Client {
         conn.id = id;
         return conn;
     }
-
-    private auto topicsToConns(TopicPartitions[] topics) {
-        // temp
-    }
-
-    @property auto clientId() { return m_clientId; }
-    @property auto clientId(string v) { return m_clientId = v; }
-
-    @property ref const(Configuration) config() { return m_config; }
-
-    @property auto connected() { return m_connected; }
 
     string[] getTopics() {
         string[] topics;
@@ -161,25 +158,73 @@ class Client {
         return partitions;
     }
 
+    // This task tries to reconnect consumers to the brokers in the background.
+    // When the connection fails or the leader is changed for a partition, the consumer needs to switch
+    // the connection to the other broker. Consumer is added to the brokerlessConsumer list each time
+    // the connection becomes invalid (it's also added upon the Consumer class instantiation).
+    // In such situation, consumer queue is still valid and may be processed by the user's task. It may happen
+    // that the connection is switched before the queue is exhausted, and the new connection fills the queue up
+    // again in a short time, so that the consumer doesn't need to wait for the messages at all. For the consumer,
+    // it would be completely transparent.
+    private void connectionManagerMain() {
+        for (;;) {
+            Consumer consumer;
+            synchronized (m_mutex) {
+                while (m_brokerlessConsumers.empty)
+                    m_brokerlessConsumersEmpty.wait();
+                consumer = m_brokerlessConsumers.front;
+                m_brokerlessConsumers.removeFront();
+            }
+
+            PartitionMetadata pm;
+
+            // get the new partition metadata and wait for leader election if needed
+            auto remainingRetries = m_config.leaderElectionRetryCount;
+            while (!m_config.leaderElectionRetryCount || remainingRetries--) {
+                if (!refreshMetadata()) {
+                    // fatal error, we couldn't get the new metadata from the bootstrap brokers
+                    throw new Exception("Couldn't refresh the metadata");
+                }
+                try {
+                    pm = m_metadata.findTopicMetadata(consumer.topic).
+                                    findPartitionMetadata(consumer.partition);
+                } catch (MetadataException ex) {
+                    // no topic and/or partition on this broker
+                    throw ex; // TODO: pass this exception to the consumer task
+                }
+                if (pm.leader >= 0)
+                    break;
+                sleep(m_config.leaderElectionRetryTimeout.msecs);
+            }
+
+            if (pm.leader < 0) {
+                // all retries failed, we still dont have a leader for the consumer's topic/partition
+                throw new Exception("Leader election timed out"); // TODO: pass it to consumer task
+            }
+
+            try {
+                BrokerConnection conn = getConn(pm.leader);
+                conn.queueGroup.addQueue(consumer.queue);
+            } catch (ConnectionException) {
+                // couldn't connect to the leader
+                throw new Exception("Couldn't connect to the leader broker"); // TODO: pass it to consumer task
+            }
+
+        }
+    }
+
 package: // functions below are used by the consumer and producer classes
 
-    Message getMessage(Consumer consumer) {
-        return Message();
+    void addNewConsumer(Consumer consumer) {
+        synchronized (m_mutex) {
+            foreach (c; m_consumers) {
+                if (c.topic == consumer.topic && c.partition == consumer.partition)
+                    throw new Exception(format("This client already has a consumer for topic %s and partition %d",
+                        c.topic, c.partition));
+            }
+            m_consumers.insertBack(consumer);
+            m_brokerlessConsumers.insertBack(consumer);
+            m_brokerlessConsumersEmpty.notify();
+        }
     }
-}
-
-enum Compression {
-    None = 0,
-    GZIP = 1,
-    Snappy = 2
-}
-
-struct PartitionOffset {
-    int partition;
-    long offset;
-}
-
-struct TopicPartitions {
-    string topic;
-    PartitionOffset[] partitions;
 }
