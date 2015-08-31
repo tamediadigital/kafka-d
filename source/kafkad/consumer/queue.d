@@ -20,12 +20,13 @@ struct QueueBuffer {
     }
 }
 
+// Holds the buffers for the consumer
 class Queue {
     private {
         Consumer m_consumer;
         List!(QueueBuffer) m_freeBuffers, m_filledBuffers;
         QueueBuffer* m_lastBuffer;
-        TaskMutex m_mutex;// m_groupMutex, m_dummyMutex;
+        TaskMutex m_mutex;
         TaskCondition m_filledCondition;
         bool m_fetchPending;
         QueueGroup m_group;
@@ -54,7 +55,6 @@ class Queue {
         m_lastBuffer = null;
         m_mutex = new TaskMutex();
         m_filledCondition = new TaskCondition(m_mutex);
-        //m_fetchPending = false;
         m_group = null;
     }
 
