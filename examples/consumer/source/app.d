@@ -10,11 +10,15 @@ void main() {
         // adjust config's properties if necessary
         
         Client client = new Client([BrokerAddress("192.168.86.10", 9092)], "kafka-d", config);
-        while (!client.connect())
+        do {
             writeln("Trying to bootstrap kafka client...");
+        } while (!client.connect());
+        
+        writeln("Connected!");
         
         foreach (topic; client.getTopics()) {
             foreach (partition; client.getPartitions(topic)) {
+                writefln("Subscribing topic %s and partition %d", topic, partition);
                 runWorkerTask((Client client, string topic, int partition) {
                     Consumer consumer = new Consumer(client, topic, partition, StartingOffset.Earliest);
                     for (;;) {
