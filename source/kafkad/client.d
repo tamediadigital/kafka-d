@@ -207,6 +207,11 @@ class Client {
 
             try {
                 BrokerConnection conn = getConn(pm.leader);
+                if (consumer.queue.offset < 0) {
+                    // get earliest or latest offset
+                    auto offset = conn.getStartingOffset(consumer.topic, consumer.partition, consumer.queue.offset);
+                    consumer.queue.offset = offset;
+                }
                 conn.queueGroup.addQueue(consumer.queue);
             } catch (ConnectionException) {
                 // couldn't connect to the leader

@@ -5,6 +5,7 @@ import kafkad.consumer.consumer;
 import kafkad.consumer.group;
 import kafkad.utils.lists;
 import vibe.core.sync;
+import std.bitmanip;
 import std.exception;
 import core.memory;
 
@@ -18,6 +19,22 @@ struct QueueBuffer {
     this(size_t size) {
         buffer = cast(ubyte*)enforce(GC.malloc(size, GC.BlkAttr.NO_SCAN));
     }
+
+    long findNextOffset() {
+        ubyte* p = this.p;
+        ubyte* end = this.p + messageSetSize;
+        long offset = -2;
+        while (end - p > 12) {
+            offset = bigEndianToNative!long(p[0 .. 8]);
+            int messageSize = bigEndianToNative!int(p[8 .. 12]);
+            p += 12 + messageSize;
+            if (p > end) {
+                // this is last, partial message
+                return offset;
+            }
+        }
+        return offset + 1;
+    }
 }
 
 // Holds the buffers for the consumer
@@ -30,6 +47,7 @@ class Queue {
         TaskCondition m_filledCondition;
         bool m_fetchPending;
         QueueGroup m_group;
+        long m_offset;
     }
 
     // this is also updated in the fetch task
@@ -43,6 +61,9 @@ class Queue {
 
     @property auto queueGroup() { return m_group; }
     @property auto queueGroup(QueueGroup v) { return m_group = v; }
+
+    @property auto offset() { return m_offset; }
+    @property auto offset(long v) { return m_offset = v; }
 
     this(Consumer consumer, in Configuration config) {
         import std.algorithm : max;

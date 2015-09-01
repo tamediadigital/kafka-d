@@ -83,6 +83,22 @@ struct Serializer {
         serialize(cast(int)length);
     }
 
+    void serialize(T)(T[] s)
+        if (!is(T == ubyte) && !is(T == char))
+    {
+        serialize!int(s.length);
+        foreach (ref a; s)
+            serialize(a);
+    }
+
+    void serialize(T)(ref T s)
+        if (is(T == struct))
+    {
+        alias Names = FieldNameTuple!T;
+        foreach (N; Names)
+            serialize(__traits(getMember, s, N));
+    }
+
     private void request(size_t size, ApiKey apiKey, short apiVersion, int correlationId, string clientId) {
         size += 2 + 2 + 4 + stringSize(clientId);
         serialize(cast(int)size);
@@ -128,12 +144,35 @@ struct Serializer {
             GroupPartition* p = t.fetchRequestPartitionsFront;
             while (p) {
                 serialize(p.queue.consumer.partition);
-                //serialize(p.consumer.offset);
-                serialize!long(0);//FIXME
+                serialize(p.queue.offset);
                 serialize!int(config.consumerMaxBytes); // MaxBytes
                 p = p.next;
             }
             t = t.next;
         }
     }
+
+    // version 0
+    void offsetRequest_v0(int correlationId, string clientId, OffsetRequestParams_v0 params) {
+        auto size = 4 + arrayOverhead;
+        foreach (ref t; params.topics) {
+            size += stringSize(t.topic) + arrayOverhead + t.partitions.length * (4 + 8 + 4);
+        }
+        request(size, ApiKey.OffsetRequest, 0, correlationId, clientId);
+        serialize(params);
+    }
+}
+
+struct OffsetRequestParams_v0 {
+    static struct PartTimeMax {
+        int partition;
+        long time;
+        int maxOffsets;
+    }
+    static struct Topic {
+        string topic;
+        PartTimeMax[] partitions;
+    }
+    int replicaId;
+    Topic[] topics;
 }

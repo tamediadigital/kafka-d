@@ -174,4 +174,23 @@ struct Deserializer {
         deserialize(r);
         return r;
     }
+
+    auto offsetResponse_v0() {
+        OffsetResponse_v0 r;
+        deserialize(r);
+        return r;
+    }
+}
+
+struct OffsetResponse_v0 {
+    static struct PartitionOffsets {
+        int partition;
+        short errorCode;
+        long[] offsets;
+    }
+    static struct Topic {
+        string topic;
+        PartitionOffsets[] partitions;
+    }
+    Topic[] topics;
 }

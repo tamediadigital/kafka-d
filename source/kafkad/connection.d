@@ -15,7 +15,7 @@ import core.time;
 
 package:
 
-enum RequestType { Metadata, Fetch };
+enum RequestType { Metadata, Fetch, Offset };
 
 struct Request {
     RequestType type;
@@ -131,6 +131,10 @@ class BrokerConnection {
                     Metadata metadata = m_des.metadataResponse_v0();
                     send(req.tid, cast(shared)metadata);
                     break;
+                case RequestType.Offset:
+                    OffsetResponse_v0 resp = m_des.offsetResponse_v0();
+                    send(req.tid, cast(shared)resp);
+                    break;
                 case RequestType.Fetch:
                     // parse the fetch response, move returned messages to the correct queues,
                     // and handle partition errors if needed
@@ -202,7 +206,12 @@ class BrokerConnection {
                                 qbuf.p = qbuf.buffer;
                                 qbuf.messageSetSize = pi.messageSetSize;
 
+                                // find the next offset to fetch
+                                long nextOffset = qbuf.findNextOffset();
+
                                 synchronized (queue.mutex) {
+                                    if (nextOffset != -1)
+                                        queue.offset = nextOffset;
                                     queue.returnFilledBuffer(qbuf);
                                     // queue.fetchPending is always true here
                                     if (queue.hasFreeBuffer)
@@ -230,7 +239,39 @@ class BrokerConnection {
             m_requests.pushFilledNode(req);
         }
         Metadata ret;
-        receive((shared Metadata metadata) { ret = cast()metadata; });
+        receive((shared Metadata v) { ret = cast()v; });
         return ret;
+    }
+
+    long getStartingOffset(string topic, int partition, long offset) {
+        assert(offset == -1 || offset == -2);
+        OffsetRequestParams_v0.PartTimeMax[1] p;
+        p[0].partition = partition;
+        p[0].time = offset;
+        p[0].maxOffsets = 1;
+        OffsetRequestParams_v0.Topic[1] t;
+        t[0].topic = topic;
+        t[0].partitions = p;
+        OffsetRequestParams_v0 params;
+        params.replicaId = id;
+        params.topics = t;
+        synchronized (m_mutex) {
+            m_ser.offsetRequest_v0(0, m_client.clientId, params);
+            m_ser.flush();
+
+            auto req = m_requests.getNodeToFill();
+            req.type = RequestType.Offset;
+            req.tid = thisTid;
+            m_requests.pushFilledNode(req);
+        }
+        shared OffsetResponse_v0 resp;
+        receive((shared OffsetResponse_v0 v) { resp = v; });
+        enforce(resp.topics.length == 1);
+        enforce(resp.topics[0].partitions.length == 1);
+        import std.format;
+        enforce(resp.topics[0].partitions[0].errorCode == 0,
+            format("Could not get starting offset for topic %s and partition %d", topic, partition));
+        enforce(resp.topics[0].partitions[0].offsets.length == 1);
+        return resp.topics[0].partitions[0].offsets[0];
     }
 }

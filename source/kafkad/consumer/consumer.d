@@ -36,7 +36,6 @@ class Consumer {
         Client m_client;
         string m_topic;
         int m_partition;
-        long m_offset;
         Queue m_queue;
         QueueBuffer* m_currentBuffer;
     }
@@ -52,11 +51,12 @@ class Consumer {
     @property auto partition() { return m_partition; }
 
     this(Client client, string topic, int partition, StartingOffset startingOffset) {
+        enforce(startingOffset.offset >= -2);
         m_client = client;
         m_topic = topic;
         m_partition = partition;
-        m_offset = startingOffset.offset;
         m_queue = new Queue(this, client.config);
+        m_queue.offset = startingOffset.offset;
         m_currentBuffer = null;
 
         client.addNewConsumer(this);
