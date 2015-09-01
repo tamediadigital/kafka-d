@@ -47,6 +47,7 @@ class QueueGroup {
         GroupTopic*[string] m_groupTopics;
         TaskMutex m_mutex;
         TaskCondition m_freeCondition; // notified when there are queues with free buffers
+        size_t m_requestsInGroup;
     }
 
     GroupTopic* fetchRequestTopicsFront, fetchRequestTopicsBack;
@@ -59,6 +60,7 @@ class QueueGroup {
     @property auto groupTopics() { return m_groupTopics; }
     @property auto mutex() { return m_mutex; }
     @property auto freeCondition() { return m_freeCondition; }
+    @property auto requestsInGroup() { return m_requestsInGroup; }
 
     void clearFetchRequestLists() {
         GroupTopic* cur = fetchRequestTopicsFront;
@@ -67,6 +69,7 @@ class QueueGroup {
             cur = cur.next;
         }
         fetchRequestTopicsFront = null;
+        m_requestsInGroup = 0;
     }
 
     void queueHasFreeBuffers(Queue queue) {
@@ -78,18 +81,19 @@ class QueueGroup {
     }
 
     void queueHasFreeBuffers(GroupTopic* ptopic, GroupPartition* ppartition) {
+        assert(ptopic);
+        assert(ppartition);
         if (!ptopic.isInFetchRequest) {
             if (!fetchRequestTopicsFront) {
                 // this will be the first topic in the following fetch request
                 fetchRequestTopicsFront = ptopic;
                 fetchRequestTopicsBack = ptopic;
-                ptopic.next = null;
             } else {
                 assert(fetchRequestTopicsBack);
                 fetchRequestTopicsBack.next = ptopic;
                 fetchRequestTopicsBack = ptopic;
-                ptopic = null;
             }
+            ptopic.next = null;
             // this will be the first partition in this topic in the following fetch request
             ptopic.fetchRequestPartitionsFront = ppartition;
             ptopic.fetchRequestPartitionsBack = ppartition;
@@ -104,6 +108,7 @@ class QueueGroup {
             ++ptopic.partitionsInFetchRequest;
             ppartition.next = null;
         }
+        ++m_requestsInGroup;
         m_freeCondition.notify();
     }
 

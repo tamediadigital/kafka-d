@@ -11,6 +11,7 @@ import vibe.core.net;
 import vibe.core.task;
 import vibe.core.sync;
 import vibe.core.concurrency;
+import core.time;
 
 package:
 
@@ -60,11 +61,35 @@ class BrokerConnection {
 
     void fetcherMain() {
         int size, correlationId;
+        bool gotFirstRequest = false;
+        MonoTime startTime;
         for (;;) {
             // send requests
             synchronized (m_queueGroup.mutex) {
-                while (!m_queueGroup.fetchRequestTopicsFront)
-                    m_queueGroup.freeCondition.wait();
+                if (!gotFirstRequest) {
+                    // wait for the first fetch request
+                    while (!m_queueGroup.fetchRequestTopicsFront) {
+                        m_queueGroup.freeCondition.wait();
+                    }
+                    if (m_queueGroup.requestsInGroup < m_client.config.fetcherBundleMinRequests) {
+                        gotFirstRequest = true;
+                        // start the timer
+                        startTime = MonoTime.currTime;
+                        // wait for more requests
+                        continue;
+                    }
+                } else {
+                    // wait up to configured wait time or up to configured request count
+                    while (m_queueGroup.requestsInGroup < m_client.config.fetcherBundleMinRequests) {
+                        Duration elapsedTime = MonoTime.currTime - startTime;
+                        if (elapsedTime >= m_client.config.fetcherBundleMaxWaitTime.msecs)
+                            break; // timeout reached
+                        Duration remaining = m_client.config.fetcherBundleMaxWaitTime.msecs - elapsedTime;
+                        if (!m_queueGroup.freeCondition.wait(remaining))
+                            break; // timeout reached
+                    }
+                    gotFirstRequest = false;
+                }
 
                 synchronized (m_mutex) {
                     m_ser.fetchRequest_v0(0, m_client.clientId, m_client.config, m_queueGroup);
