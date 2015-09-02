@@ -28,7 +28,8 @@ void main() {
                         string keyStr = msg.key ? cast(string)msg.key : ""; // msg.key may be null
                         string valueStr = msg.value ? cast(string)msg.value : ""; // msg.value may be null
                         
-                        writefln("Message, offset %d, key: %s, value: %s", msg.offset, keyStr, valueStr);
+                        writefln("Topic %s, part. %d, offset %d, key: %s, value: %s",
+                                    topic, partition, msg.offset, keyStr, valueStr);
                     }
                 }, client, topic, partition);
             }

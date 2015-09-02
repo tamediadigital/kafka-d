@@ -183,6 +183,8 @@ class BrokerConnection {
 
                                 // TODO: handle errorCode
                                 switch (cast(ApiError)pi.errorCode) {
+                                    case ApiError.UnknownTopicOrPartition:
+                                    case ApiError.LeaderNotAvailable:
                                     case ApiError.NotLeaderForPartition:
                                         // We need to refresh the metadata, get the new connection and
                                         // retry the request. To do so, we remove the consumer from this
