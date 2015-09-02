@@ -86,7 +86,7 @@ struct Serializer {
     void serialize(T)(T[] s)
         if (!is(T == ubyte) && !is(T == char))
     {
-        serialize!int(s.length);
+        serialize!int( cast(int) s.length);
         foreach (ref a; s)
             serialize(a);
     }
