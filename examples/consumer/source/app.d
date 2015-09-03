@@ -9,7 +9,7 @@ void main() {
         Configuration config;
         // adjust config's properties if necessary
         
-        Client client = new Client([BrokerAddress("192.168.86.10", 9092)], "kafka-d", config);
+        Client client = new Client([BrokerAddress("127.0.0.1", 9092)], "kafka-d", config);
         do {
             writeln("Trying to bootstrap kafka client...");
         } while (!client.connect());
