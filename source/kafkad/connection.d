@@ -56,7 +56,7 @@ class BrokerConnection {
         m_queueGroup = new QueueGroup();
         m_fetcherTask = runTask(&fetcherMain);
         m_receiverTask = runTask(&receiverMain);
-        m_topicNameBuffer = new ubyte[min(client.config.maxTopicNameLength, short.max)];
+        m_topicNameBuffer = new ubyte[short.max];
     }
 
     void fetcherMain() {
@@ -146,9 +146,6 @@ class BrokerConnection {
                         int numpartitions;
                         short topicNameLen;
                         m_des.deserialize(topicNameLen);
-
-                        // TODO: send this exception to the consumer and skip the excess bytes
-                        enforce(topicNameLen <= m_client.config.maxTopicNameLength, "Topic name is too long");
 
                         ubyte[] topicSlice = m_topicNameBuffer[0 .. topicNameLen];
                         m_des.deserializeSlice(topicSlice);
