@@ -4,6 +4,7 @@ import kafkad.consumer.queue;
 import vibe.core.sync;
 
 struct GroupPartition {
+    int partition;
     Queue queue;
 
     /// field used to build the partition linked list for each topic for the dynamic fetch request
@@ -125,7 +126,7 @@ class QueueGroup {
     void addQueue(Queue queue) {
         synchronized (m_mutex, queue.mutex) {
             auto ptopic = getOrCreateTopic(queue.consumer.topic);
-            auto ppartition = new GroupPartition(queue);
+            auto ppartition = new GroupPartition(queue.consumer.partition, queue);
             ptopic.partitions[queue.consumer.partition] = ppartition;
 
             queue.queueGroup = this;
@@ -138,8 +139,18 @@ class QueueGroup {
         }
     }
 
-    void removeQueue(Queue queue) {
-        //fixme
+    // this is called when m_mutex is already locked
+    void removeQueue(GroupTopic* topic, GroupPartition* partition) {
+        // remove the partition from the GroupTopic
+        assert(topic.partitions.remove(partition.partition));
+        if (!topic.partitions.length) {
+            // remove the topic from the QueueGroup
+            assert(m_groupTopics.remove(topic.topic));
+        }
+        synchronized (partition.queue.mutex) {
+            partition.queue.queueGroup = null;
+            partition.queue.fetchPending = false;
+        }
     }
 
     GroupTopic* findTopic(string topic) {

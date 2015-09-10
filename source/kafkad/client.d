@@ -170,6 +170,7 @@ class Client {
     // again in a short time, so that the consumer doesn't need to wait for the messages at all. For the consumer,
     // it would be completely transparent.
     private void connectionManagerMain() {
+    mainLoop:
         for (;;) {
             Consumer consumer;
             synchronized (m_mutex) {
@@ -193,7 +194,8 @@ class Client {
                                     findPartitionMetadata(consumer.partition);
                 } catch (MetadataException ex) {
                     // no topic and/or partition on this broker
-                    throw ex; // TODO: pass this exception to the consumer task
+                    consumer.throwException(cast(shared)ex);
+                    continue mainLoop;
                 }
                 if (pm.leader >= 0)
                     break;
@@ -202,7 +204,8 @@ class Client {
 
             if (pm.leader < 0) {
                 // all retries failed, we still dont have a leader for the consumer's topic/partition
-                throw new Exception("Leader election timed out"); // TODO: pass it to consumer task
+                consumer.throwException(new shared Exception("Leader election timed out"));
+                continue;
             }
 
             try {
@@ -215,9 +218,8 @@ class Client {
                 conn.queueGroup.addQueue(consumer.queue);
             } catch (ConnectionException) {
                 // couldn't connect to the leader
-                throw new Exception("Couldn't connect to the leader broker"); // TODO: pass it to consumer task
+                consumer.throwException(new shared Exception("Couldn't connect to the leader broker"));
             }
-
         }
     }
 

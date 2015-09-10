@@ -25,6 +25,10 @@ class MetadataException : Exception {
     mixin ExceptionCtorMixin;
 }
 
+class ProtocolException : Exception {
+    mixin ExceptionCtorMixin;
+}
+
 class CrcException : Exception {
     mixin ExceptionCtorMixin;
 }

@@ -187,13 +187,23 @@ class BrokerConnection {
                                         // retry the request. To do so, we remove the consumer from this
                                         // connection and add it to the client brokerlessConsumers list.
                                         // The client will do the rest.
-                                        m_queueGroup.removeQueue(queue);
-                                        break;
+                                        m_queueGroup.removeQueue(queueTopic, queuePartition);
+                                        m_des.skipBytes(pi.messageSetSize);
+                                        continue;
+                                    case ApiError.OffsetOutOfRange:
+                                        import std.format;
+                                        queue.consumer.throwException(new shared Exception(format(
+                                                    "Offset %d is out of range for topic %s, partition %d",
+                                                    queue.offset, queueTopic.topic, queuePartition.partition)));
+                                        continue;
                                     default: break;
                                 }
 
-                                // TODO: send this exception to the consumer and skip the excess bytes
-                                enforce(pi.messageSetSize <= m_client.config.consumerMaxBytes, "MessageSet is too big to fit into a buffer");
+                                if (pi.messageSetSize > m_client.config.consumerMaxBytes) {
+                                    queue.consumer.throwException(new shared ProtocolException("MessageSet is too big to fit into a buffer"));
+                                    m_des.skipBytes(pi.messageSetSize);
+                                    continue;
+                                }
 
                                 QueueBuffer* qbuf;
 
