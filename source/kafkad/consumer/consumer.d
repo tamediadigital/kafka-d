@@ -39,15 +39,14 @@ class Consumer {
         int m_partition;
         Queue m_queue;
         QueueBuffer* m_currentBuffer;
-        shared Exception m_exception;
     }
 
     package (kafkad) {
         @property queue() { return m_queue; }
         /// Throws an exception in the consumer task. This is used to pass the connection exceptions to the user.
-        void throwException(shared Exception ex) {
-            if (!m_exception)
-                m_exception.atomicStore(ex);
+        void throwException(Exception ex) {
+            synchronized (m_queue.mutex)
+                m_queue.appendExceptionBuffer(ex);
         }
     }
 
@@ -67,10 +66,6 @@ class Consumer {
     }
 
     Message getMessage() {
-        Exception ex = void;
-        ex = m_exception.atomicLoad();
-        if (ex)
-            throw ex;
         if (!m_currentBuffer)
             m_currentBuffer = m_queue.waitForFilledBuffer();
     processBuffer:

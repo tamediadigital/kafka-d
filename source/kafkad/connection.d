@@ -192,15 +192,18 @@ class BrokerConnection {
                                         continue;
                                     case ApiError.OffsetOutOfRange:
                                         import std.format;
-                                        queue.consumer.throwException(new shared Exception(format(
+                                        m_queueGroup.removeQueue(queueTopic, queuePartition);
+                                        queue.consumer.throwException(new Exception(format(
                                                     "Offset %d is out of range for topic %s, partition %d",
                                                     queue.offset, queueTopic.topic, queuePartition.partition)));
+                                        m_des.skipBytes(pi.messageSetSize);
                                         continue;
                                     default: break;
                                 }
 
                                 if (pi.messageSetSize > m_client.config.consumerMaxBytes) {
-                                    queue.consumer.throwException(new shared ProtocolException("MessageSet is too big to fit into a buffer"));
+                                    m_queueGroup.removeQueue(queueTopic, queuePartition);
+                                    queue.consumer.throwException(new ProtocolException("MessageSet is too big to fit into a buffer"));
                                     m_des.skipBytes(pi.messageSetSize);
                                     continue;
                                 }

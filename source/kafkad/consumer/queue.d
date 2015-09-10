@@ -13,11 +13,17 @@ import core.memory;
 struct QueueBuffer {
     ubyte* buffer, p;
     size_t messageSetSize;
+    Exception exception;
 
     QueueBuffer* next;
 
     this(size_t size) {
         buffer = cast(ubyte*)enforce(GC.malloc(size, GC.BlkAttr.NO_SCAN));
+        exception = null;
+    }
+
+    this(Exception ex) {
+        exception = ex;
     }
 
     long findNextOffset() {
@@ -92,9 +98,15 @@ class Queue {
         m_filledCondition.notify();
     }
 
+    void appendExceptionBuffer(Exception ex) {
+        m_filledBuffers.pushBack(new QueueBuffer(ex));
+        m_filledCondition.notify();
+    }
+
     QueueBuffer* waitForFilledBuffer() {
         synchronized (m_mutex) {
             if (m_lastBuffer) {
+                assert(!m_lastBuffer.exception);
                 // return the last used buffer to the free buffer list
                 m_freeBuffers.pushBack(m_lastBuffer);
                 // notify the fetch task that there are buffers to be filled in
@@ -111,6 +123,8 @@ class Queue {
             while (m_filledBuffers.empty)
                 m_filledCondition.wait();
             m_lastBuffer = m_filledBuffers.popFront();
+            if (m_lastBuffer.exception)
+                throw m_lastBuffer.exception;
             return m_lastBuffer;
         }
     }

@@ -194,7 +194,7 @@ class Client {
                                     findPartitionMetadata(consumer.partition);
                 } catch (MetadataException ex) {
                     // no topic and/or partition on this broker
-                    consumer.throwException(cast(shared)ex);
+                    consumer.throwException(ex);
                     continue mainLoop;
                 }
                 if (pm.leader >= 0)
@@ -204,7 +204,7 @@ class Client {
 
             if (pm.leader < 0) {
                 // all retries failed, we still dont have a leader for the consumer's topic/partition
-                consumer.throwException(new shared Exception("Leader election timed out"));
+                consumer.throwException(new Exception("Leader election timed out"));
                 continue;
             }
 
@@ -218,7 +218,7 @@ class Client {
                 conn.queueGroup.addQueue(consumer.queue);
             } catch (ConnectionException) {
                 // couldn't connect to the leader
-                consumer.throwException(new shared Exception("Couldn't connect to the leader broker"));
+                consumer.throwException(new Exception("Couldn't connect to the leader broker"));
             }
         }
     }
