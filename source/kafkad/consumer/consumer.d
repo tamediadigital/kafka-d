@@ -4,6 +4,7 @@ import kafkad.client;
 import kafkad.exception;
 import kafkad.consumer.queue;
 import std.exception;
+import core.atomic;
 
 /// Used to pass the starting offset to the consumer
 /// Examples:
@@ -44,6 +45,8 @@ class Consumer {
         @property queue() { return m_queue; }
         /// Throws an exception in the consumer task. This is used to pass the connection exceptions to the user.
         void throwException(Exception ex) {
+            synchronized (m_queue.mutex)
+                m_queue.appendExceptionBuffer(ex);
         }
     }
 

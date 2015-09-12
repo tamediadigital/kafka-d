@@ -56,7 +56,7 @@ class BrokerConnection {
         m_queueGroup = new QueueGroup();
         m_fetcherTask = runTask(&fetcherMain);
         m_receiverTask = runTask(&receiverMain);
-        m_topicNameBuffer = new ubyte[min(client.config.maxTopicNameLength, short.max)];
+        m_topicNameBuffer = new ubyte[short.max];
     }
 
     void fetcherMain() {
@@ -147,9 +147,6 @@ class BrokerConnection {
                         short topicNameLen;
                         m_des.deserialize(topicNameLen);
 
-                        // TODO: send this exception to the consumer and skip the excess bytes
-                        enforce(topicNameLen <= m_client.config.maxTopicNameLength, "Topic name is too long");
-
                         ubyte[] topicSlice = m_topicNameBuffer[0 .. topicNameLen];
                         m_des.deserializeSlice(topicSlice);
                         topic = cast(string)topicSlice;
@@ -190,13 +187,26 @@ class BrokerConnection {
                                         // retry the request. To do so, we remove the consumer from this
                                         // connection and add it to the client brokerlessConsumers list.
                                         // The client will do the rest.
-                                        m_queueGroup.removeQueue(queue);
-                                        break;
+                                        m_queueGroup.removeQueue(queueTopic, queuePartition);
+                                        m_des.skipBytes(pi.messageSetSize);
+                                        continue;
+                                    case ApiError.OffsetOutOfRange:
+                                        import std.format;
+                                        m_queueGroup.removeQueue(queueTopic, queuePartition);
+                                        queue.consumer.throwException(new Exception(format(
+                                                    "Offset %d is out of range for topic %s, partition %d",
+                                                    queue.offset, queueTopic.topic, queuePartition.partition)));
+                                        m_des.skipBytes(pi.messageSetSize);
+                                        continue;
                                     default: break;
                                 }
 
-                                // TODO: send this exception to the consumer and skip the excess bytes
-                                enforce(pi.messageSetSize <= m_client.config.consumerMaxBytes, "MessageSet is too big to fit into a buffer");
+                                if (pi.messageSetSize > m_client.config.consumerMaxBytes) {
+                                    m_queueGroup.removeQueue(queueTopic, queuePartition);
+                                    queue.consumer.throwException(new ProtocolException("MessageSet is too big to fit into a buffer"));
+                                    m_des.skipBytes(pi.messageSetSize);
+                                    continue;
+                                }
 
                                 QueueBuffer* qbuf;
 

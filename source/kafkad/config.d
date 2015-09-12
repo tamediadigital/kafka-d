@@ -8,8 +8,6 @@ struct Configuration {
     /// minimum number of fetch requests to accumulate before bundling them into one request
     /// the fetcher may bundle less requests if the fetcherBundleMaxWaitTime elapses first
     int fetcherBundleMinRequests = 10;
-    /// maximum length of a topic name in UTF-8 code units
-    int maxTopicNameLength = 1024;
     /// number of retries to perform when waiting for leader election, 0 = retry infinitely
     int leaderElectionRetryCount = 3;
     /// time to wait (msecs) between retries when waiting for leader election

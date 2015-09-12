@@ -143,7 +143,7 @@ struct Serializer {
             arrayLength(t.partitionsInFetchRequest);
             GroupPartition* p = t.fetchRequestPartitionsFront;
             while (p) {
-                serialize(p.queue.consumer.partition);
+                serialize(p.partition);
                 serialize(p.queue.offset);
                 serialize!int(config.consumerMaxBytes); // MaxBytes
                 p = p.next;
