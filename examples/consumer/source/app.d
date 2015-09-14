@@ -20,7 +20,7 @@ void main() {
             foreach (partition; client.getPartitions(topic)) {
                 writefln("Subscribing topic %s and partition %d", topic, partition);
                 runWorkerTask((Client client, string topic, int partition) {
-                    Consumer consumer = new Consumer(client, topic, partition, StartingOffset.Earliest);
+                    Consumer consumer = new Consumer(client, topic, partition, Offsets.Earliest);
                     for (;;) {
                         Message msg = consumer.getMessage();
                         

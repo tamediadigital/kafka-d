@@ -6,21 +6,8 @@ import kafkad.consumer.queue;
 import std.exception;
 import core.atomic;
 
-/// Used to pass the starting offset to the consumer
-/// Examples:
-/// -----
-/// auto so1 = StartingOffset.Earliest; // start from the beginning of log
-/// auto so2 = StartingOffset.Latest; // start from the end of log
-/// auto so3 = StartingOffset(100); // start from the custom offset (100)
-/// -----
-struct StartingOffset {
-    long offset;
-    this(long offset) { this.offset = offset; }
-    void opAssign(long offset) { this.offset = offset; }
-
-    enum Latest = StartingOffset(-1);
-    enum Earliest = StartingOffset(-2);
-}
+alias Offset = long;
+enum Offsets : Offset { Latest = -1, Earliest = -2 }
 
 /// Message returned by the consumer
 struct Message {
@@ -53,13 +40,13 @@ class Consumer {
     @property auto topic() { return m_topic; }
     @property auto partition() { return m_partition; }
 
-    this(Client client, string topic, int partition, StartingOffset startingOffset) {
-        enforce(startingOffset.offset >= -2);
+    this(Client client, string topic, int partition, Offset startingOffset) {
+        enforce(startingOffset >= -2);
         m_client = client;
         m_topic = topic;
         m_partition = partition;
         m_queue = new Queue(this, client.config);
-        m_queue.offset = startingOffset.offset;
+        m_queue.offset = startingOffset;
         m_currentBuffer = null;
 
         client.addNewConsumer(this);
