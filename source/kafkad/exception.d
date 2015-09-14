@@ -3,10 +3,10 @@
 import std.exception;
 
 mixin template ExceptionCtorMixin() {
-    @nogc @safe pure nothrow this(string msg, string file = __FILE__, size_t line = __LINE__, Throwable next = null) {
+    @safe pure nothrow this(string msg, string file = __FILE__, size_t line = __LINE__, Throwable next = null) {
         super(msg, file, line, next);
     }
-    @nogc @safe pure nothrow this(string msg, Throwable next, string file = __FILE__, size_t line = __LINE__) {
+    @safe pure nothrow this(string msg, Throwable next, string file = __FILE__, size_t line = __LINE__) {
         super(msg, file, line, next);
     }
 }
