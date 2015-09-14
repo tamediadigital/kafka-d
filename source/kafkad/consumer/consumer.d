@@ -15,7 +15,6 @@ import core.atomic;
 /// -----
 struct StartingOffset {
     long offset;
-    this(long offset) { this.offset = offset; }
     void opAssign(long offset) { this.offset = offset; }
 
     enum Latest = StartingOffset(-1);
@@ -130,5 +129,6 @@ class Consumer {
             m_currentBuffer = m_queue.waitForFilledBuffer();
             goto processBuffer;
         }
+        assert(0);
     }
 }
