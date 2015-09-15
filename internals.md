@@ -27,7 +27,7 @@ QueueTopic and QueuePartition classes along with QueueGroup build a dynamic stru
 ### Summary of the internal objects
 
 * ```Client``` - acts as a router between broker and consumers and producers. It transparently handles the metadata, connection establishment, leader switching, etc.
-* ```BrokerConnection** - handles a single connection to the broker node.
+* ```BrokerConnection``` - handles a single connection to the broker node.
 * ```Consumer``` - connects to the client and parses messages from the message sets. The message sets are returned from the consumer's queue.
 * ```Producer``` - connects to the client, assembles message sets from the messages specified by the user and then pushes them the producer's queue.
 * ```Worker``` - a producer or a consumer. It's a general name for both producers and consumers.
