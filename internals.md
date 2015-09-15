@@ -27,11 +27,11 @@ QueueTopic and QueuePartition classes along with QueueGroup build a dynamic stru
 ### Summary of the internal objects
 
 * ```Client``` - acts as a router between broker and consumers and producers. It transparently handles the metadata, connection establishment, leader switching, etc.
-* ```BrokerConnection``` - handles a single connection to the broker node.
+* ```BrokerConnection``` - handles a single connection to the broker node. Each connection holds a group of assigned producers and consumers - or to be more precise - their queues. Each consumer's and producer's queue is assigned to the connection's ```QueueGroup```. These assignment are dynamically handled by the client, e.g. when the leader for a partition is changed, the consumer's queue may be moved (reassigned) to another connection.
 * ```Consumer``` - connects to the client and parses messages from the message sets. The message sets are returned from the consumer's queue.
 * ```Producer``` - connects to the client, assembles message sets from the messages specified by the user and then pushes them the producer's queue.
 * ```Worker``` - a producer or a consumer. It's a general name for both producers and consumers.
-* ```Queue``` - both consumers and producers (workers) have queues. Queues belongs to the workers. Each worker has exactly one queue. They are used to move filled buffers between the assigned connection and the worker. Consumers wait on the queues for the message sets to parse. The connection pushes received message sets to the queues. Likewisely, producers push prepared message sets to the their queues and connections wait for these message sets. When the producer queue has buffers, the connection prepares a request and sends these message sets to the broker.
+* ```Queue``` - both consumers and producers (workers) have queues. Queues belongs to the workers. Each worker has exactly one queue. They are used to move filled buffers between the connections and the workers. Consumers wait on the queues for the message sets to parse. The connection pushes received message sets to the queues. Likewisely, producers push prepared message sets to the their queues and connections wait for these message sets. When the producer queue has buffers, the connection prepares a request and sends these message sets to the broker.
 * ```QueueGroup``` - groups belong to the connections. Each connection has exactly one consumer queue group and one producer queue group. Groups hold all consumer and producer queues. When a new consumer or producer is created, its queue is attached to the respecive queue group.
 * ```GroupTopic``` and ```GroupPartition``` - they belong to the ```QueueGroup```. They are used internally by the ```QueueGroup``` to organize attached consumer and producer queues in a simple tree structure of topics and child partitions. They help to quickly search for a topic/partition which is required to handle the response. They are also used to build dynamic, bundled requests.
 
@@ -41,16 +41,16 @@ QueueTopic and QueuePartition classes along with QueueGroup build a dynamic stru
 1. A consumer or producer (worker) is attached to the client
 2. ```Client``` adds the worker to the internal list of workers
 3. ```Client```'s connection manager task, tries to establish the connection to the broker. It first looks for respective leader node in the metadata.
-4. When the connection is open (either it is already opened or just connected), the client attaches worker's queue to the respective queue group of the connection. From now, the connection will send fetch requests as long as there are free/unfilled buffers in the consumer queues and produce requests as long as there are filled buffers in the producer queues.
+4. When the connection is open (either it is already opened or just connected), the client attaches worker's queue to the respective queue group of the connection. From now, the connection's fetcher task will send fetch requests as long as there are free/unfilled buffers in the consumer queues and the pusher task will send produce requests as long as there are filled buffers in the producer queues. The Consumers returns processed buffers to their queues. These buffers become the free/unfilled buffers. The producers push the filled buffers to their queues when they finish preparing the batch of messages (a message set).
 
 #### Consumer
-1. User calls ```getMessage()```
-2. If the consumer currenly owns a buffer (message set), it parses the next message and returns it to the user. The parsing is typically performed in a separate worker task (spawned by the library user), thus leading to parallelization of the processing. This is desirable, especially when message sets are compressed.
+1. User calls ```Consumer.getMessage()```
+2. If the consumer currenly owns a buffer (message set), it parses the next message and returns it to the user.
 3. When the buffer holding the message set becomes empty, the consumer gets the next buffer from its queue. Consumer may block, waiting for the buffer, i.e. when its queue is empty and the broker didn't return the data yet.
 
 #### Producer
-1. User calls ```pushMessage()```
-2. The producer waits for a free buffer to fill
-3. When it gets a buffer, it starts to assemble the message set up to configured timeout or maximum message set size.
+1. User calls ```Producer.pushMessage(key, value)```
+2. If the producer currently owns a buffer for a message set, it assembles the next message and places it in the buffer. Otherwise, the producer waits for the next buffer in the queue. Buffers are returned to the queue after they are sent to the broker, so the producer may reuse them and prepare subsequent message sets.
+3. Producer assembles the message set up to configured timeout (```Config.producerBatchTimeout```) or maximum message set size (```Config.producerMaxBytes```)
 4. When the timeout happens or the size limit is reached, the message set is optionally compressed and pushed to the queue.
 5. The connection is notified when at least one producer's queue has buffers. Then it assembles the produce request, possibly bundling more than one message sets from different producer queues.
