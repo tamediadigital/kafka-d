@@ -10,7 +10,10 @@ If there are multiple consumers with an empty queue, the fetcher task will combi
 
 ### Consumer queues
 
-Each consumer has an input message queue with configurable size (consumerMaxBytes + consumerQueueBuffers). Queues improve the throughput by ensuring there is always a message to consume. For example, when consumer pops one message for processing, the next one is fetched in the background (while the consumer processes that message). The background fetch requests may be bundled as described in previous section.
+Each ```Consumer``` has an ```Queue``` of n (```consumerQueueBuffers```) ```QueueBuffer```'s of configurable size (```consumerMaxBytes``` ). 
+Queues improve the throughput by ensuring there is always a message to consume. 
+For example, when consumer pops one message for processing, the next one is fetched in the background (while the consumer processes that message). 
+The background fetch requests may be bundled as described in previous section.
 
 ### Producer queues / message batching
 
