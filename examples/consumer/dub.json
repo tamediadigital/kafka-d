@@ -1,6 +1,7 @@
 {
     "name": "consumer",
     "description": "Kafka consumer example",
+    "copyright": "Copyright © 2015 Tamedia AG",
     "authors": [ "Piotr Szturmaj" ],
     "dependencies": {
         "kafka-d": {"version": "~master", "path": "../../"},
