@@ -4,7 +4,9 @@
 
 ### Pipelining and bundling
 
-kafka-d supports pipelining and batching of requests through dedicated fetcher task assigned to each BrokerConnection. When the queue of one of the consumers is not full, the task issues a fetch request in the background. In typical scenario, there will be more than one consumer with empty queue. In this case, the fetcher task will combine many fetch requests into a single one.
+kafka-d supports pipelining and batching of requests through dedicated fetcher tasks assigned to each BrokerConnection. 
+When the queue of one of the consumers is not full, the task issues a fetch request in the background. 
+If there are multiple consumers with an empty queue, the fetcher task will combine many fetch requests.
 
 ### Consumer queues
 
