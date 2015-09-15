@@ -1,12 +1,12 @@
 # kafka-d internals
 
-## Pipelining and batching
+## Pipelining and bundling
 
-kafka-d supports pipelining and batching of requests through dedicated worker task assigned to each BrokerConnection. When the queue of one of the consumers is not full, the task issues a fetch request in the background. In typical scenario, there will be more than one consumer with empty queue. In this case, the worker task will combine many fetch requests into a single one.
+kafka-d supports pipelining and batching of requests through dedicated fetcher task assigned to each BrokerConnection. When the queue of one of the consumers is not full, the task issues a fetch request in the background. In typical scenario, there will be more than one consumer with empty queue. In this case, the fetcher task will combine many fetch requests into a single one.
 
 ## Consumer queues
 
-Each consumer has an input message queue with configurable size (consumerQueueMaxBytes). Queues improve the throughput by ensuring there is always a message to consume. For example, when consumer pops one message for processing, the next one is fetched in the background (while the consumer processes that message). The background fetches may be batched as described in previous section.
+Each consumer has an input message queue with configurable size (consumerMaxBytes + consumerQueueBuffers). Queues improve the throughput by ensuring there is always a message to consume. For example, when consumer pops one message for processing, the next one is fetched in the background (while the consumer processes that message). The background fetch requests may be bundled as described in previous section.
 
 ## Producer queues / message batching
 
