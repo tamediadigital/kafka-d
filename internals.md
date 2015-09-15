@@ -41,22 +41,29 @@ QueueTopic and QueuePartition classes along with QueueGroup build a dynamic stru
 
 * ```Client``` - acts as a router between broker and consumers and producers. 
 It transparently handles the metadata, connection establishment, leader switching, etc.
+
 * ```BrokerConnection``` - handles a single connection to the broker node. 
 Each connection holds a group of assigned producers and consumers - or to be more precise - their queues. 
 Each consumer's and producer's queue is dynamically assigned to the connection's ```QueueGroup```. 
 When the leader for a partition is changed, the consumer's queue may be moved (reassigned) to another connection.
+
 * ```Consumer``` - connects to the client and parses messages from the message sets. 
 The message sets are returned from the consumer's queue.
+
 * ```Producer``` - connects to the client, assembles message sets from the messages specified by the user and then pushes them the producer's queue.
+
 * ```Worker``` - a producer or a consumer. It's a general name for both producers and consumers.
+
 * ```Queue``` - both consumers and producers (workers) have queues. Queues belongs to the workers. 
 Each worker has exactly one queue. They are used to move filled buffers between the connections and the workers. 
 Consumers wait on the queues for the message sets to parse. 
 The connection pushes received message sets to the queues. 
 Likewisely, producers push prepared message sets to the their queues and connections wait for these message sets. 
 When the producer queue has buffers, the connection prepares a request and sends these message sets to the broker.
+
 * ```QueueGroup``` - groups belong to the connections. Each connection has exactly one consumer queue group and one producer queue group.
  Groups hold all consumer and producer queues. When a new consumer or producer is created, its queue is attached to the respecive queue group.
+
 * ```GroupTopic``` and ```GroupPartition``` - they belong to the ```QueueGroup```. 
 They are used internally by the ```QueueGroup``` to organize attached consumer and producer queues in a simple tree structure of topics and child partitions. 
 They help to quickly search for a topic/partition which is required to handle the response. 
