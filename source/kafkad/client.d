@@ -237,4 +237,23 @@ package: // functions below are used by the consumer and producer classes
             m_brokerlessConsumersEmpty.notify();
         }
     }
+
+    void connectionLost(BrokerConnection conn) {
+        synchronized (m_mutex, conn.queueGroup.mutex) {
+            foreach (pair; m_conns.byKeyValue) {
+                if (pair.value == conn) {
+                    m_conns.remove(pair.key);
+                    break;
+                }
+            }
+            foreach (q; &conn.queueGroup.queues) {
+                m_brokerlessConsumers.insertBack(q.consumer);
+                synchronized (q.consumer.queue) {
+                    q.consumer.queue.queueGroup = null;
+                    q.consumer.queue.fetchPending = false;
+                }
+            }
+            m_brokerlessConsumersEmpty.notify();
+        }
+    }
 }

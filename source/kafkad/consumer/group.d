@@ -158,4 +158,15 @@ class QueueGroup {
         auto pptopic = topic in m_groupTopics;
         return pptopic ? *pptopic : null;
     }
+
+    int queues(int delegate(Queue) dg) {
+        foreach (t; m_groupTopics.byValue) {
+            foreach (p; t.partitions.byValue) {
+                auto ret = dg(p.queue);
+                if (ret)
+                    return ret;
+            }
+        }
+        return 0;
+    }
 }

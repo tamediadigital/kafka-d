@@ -107,136 +107,142 @@ class BrokerConnection {
     }
 
     void receiverMain() {
-        int size, correlationId;
-        for (;;) {
-            m_des.getMessage(size, correlationId);
-            m_des.beginMessage(size);
-            scope (success)
-                m_des.endMessage();
+        try {
+            int size, correlationId;
+            for (;;) {
+                m_des.getMessage(size, correlationId);
+                m_des.beginMessage(size);
+                scope (success)
+                    m_des.endMessage();
 
-            // requests are always processed in order on a single TCP connection,
-            // and we rely on that order rather than on the correlationId
-            // requests are pushed to the request queue by the consumer and producer
-            // and they are popped here in the order they were sent
-            Request req = void;
-            synchronized (m_mutex) {
-                assert(!m_requests.empty);
-                auto node = m_requests.getNodeToProcess();
-                req = *node;
-                m_requests.returnProcessedNode(node);
-            }
+                // requests are always processed in order on a single TCP connection,
+                // and we rely on that order rather than on the correlationId
+                // requests are pushed to the request queue by the consumer and producer
+                // and they are popped here in the order they were sent
+                Request req = void;
+                synchronized (m_mutex) {
+                    assert(!m_requests.empty);
+                    auto node = m_requests.getNodeToProcess();
+                    req = *node;
+                    m_requests.returnProcessedNode(node);
+                }
 
-            switch (req.type) {
-                case RequestType.Metadata:
-                    Metadata metadata = m_des.metadataResponse_v0();
-                    send(req.tid, cast(shared)metadata);
-                    break;
-                case RequestType.Offset:
-                    OffsetResponse_v0 resp = m_des.offsetResponse_v0();
-                    send(req.tid, cast(shared)resp);
-                    break;
-                case RequestType.Fetch:
-                    // parse the fetch response, move returned messages to the correct queues,
-                    // and handle partition errors if needed
-                    int numtopics;
-                    m_des.deserialize(numtopics);
-                    assert(numtopics > 0);
-                    foreach (nt; 0 .. numtopics) {
-                        string topic;
-                        int numpartitions;
-                        short topicNameLen;
-                        m_des.deserialize(topicNameLen);
+                switch (req.type) {
+                    case RequestType.Metadata:
+                        Metadata metadata = m_des.metadataResponse_v0();
+                        send(req.tid, cast(shared)metadata);
+                        break;
+                    case RequestType.Offset:
+                        OffsetResponse_v0 resp = m_des.offsetResponse_v0();
+                        send(req.tid, cast(shared)resp);
+                        break;
+                    case RequestType.Fetch:
+                        // parse the fetch response, move returned messages to the correct queues,
+                        // and handle partition errors if needed
+                        int numtopics;
+                        m_des.deserialize(numtopics);
+                        assert(numtopics > 0);
+                        foreach (nt; 0 .. numtopics) {
+                            string topic;
+                            int numpartitions;
+                            short topicNameLen;
+                            m_des.deserialize(topicNameLen);
 
-                        ubyte[] topicSlice = m_topicNameBuffer[0 .. topicNameLen];
-                        m_des.deserializeSlice(topicSlice);
-                        topic = cast(string)topicSlice;
-                        m_des.deserialize(numpartitions);
-                        assert(numpartitions > 0);
+                            ubyte[] topicSlice = m_topicNameBuffer[0 .. topicNameLen];
+                            m_des.deserializeSlice(topicSlice);
+                            topic = cast(string)topicSlice;
+                            m_des.deserialize(numpartitions);
+                            assert(numpartitions > 0);
 
-                        synchronized (m_queueGroup.mutex) {
-                            GroupTopic* queueTopic = m_queueGroup.findTopic(topic);
+                            synchronized (m_queueGroup.mutex) {
+                                GroupTopic* queueTopic = m_queueGroup.findTopic(topic);
 
-                            foreach (np; 0 .. numpartitions) {
-                                static struct PartitionInfo {
-                                    int partition;
-                                    short errorCode;
-                                    long endOffset;
-                                    int messageSetSize;
-                                }
-                                PartitionInfo pi;
-                                m_des.deserialize(pi);
+                                foreach (np; 0 .. numpartitions) {
+                                    static struct PartitionInfo {
+                                        int partition;
+                                        short errorCode;
+                                        long endOffset;
+                                        int messageSetSize;
+                                    }
+                                    PartitionInfo pi;
+                                    m_des.deserialize(pi);
 
-                                GroupPartition* queuePartition = null;
-                                if (queueTopic)
-                                    queuePartition = queueTopic.findPartition(pi.partition);
+                                    GroupPartition* queuePartition = null;
+                                    if (queueTopic)
+                                        queuePartition = queueTopic.findPartition(pi.partition);
 
-                                if (!queuePartition) {
-                                    // skip the partition
-                                    m_des.skipBytes(pi.messageSetSize);
-                                    continue;
-                                }
-
-                                Queue queue = queuePartition.queue;
-
-                                // TODO: handle errorCode
-                                switch (cast(ApiError)pi.errorCode) {
-                                    case ApiError.UnknownTopicOrPartition:
-                                    case ApiError.LeaderNotAvailable:
-                                    case ApiError.NotLeaderForPartition:
-                                        // We need to refresh the metadata, get the new connection and
-                                        // retry the request. To do so, we remove the consumer from this
-                                        // connection and add it to the client brokerlessConsumers list.
-                                        // The client will do the rest.
-                                        m_queueGroup.removeQueue(queueTopic, queuePartition);
+                                    if (!queuePartition) {
+                                        // skip the partition
                                         m_des.skipBytes(pi.messageSetSize);
                                         continue;
-                                    case ApiError.OffsetOutOfRange:
-                                        import std.format;
+                                    }
+
+                                    Queue queue = queuePartition.queue;
+
+                                    // TODO: handle errorCode
+                                    switch (cast(ApiError)pi.errorCode) {
+                                        case ApiError.UnknownTopicOrPartition:
+                                        case ApiError.LeaderNotAvailable:
+                                        case ApiError.NotLeaderForPartition:
+                                            // We need to refresh the metadata, get the new connection and
+                                            // retry the request. To do so, we remove the consumer from this
+                                            // connection and add it to the client brokerlessConsumers list.
+                                            // The client will do the rest.
+                                            m_queueGroup.removeQueue(queueTopic, queuePartition);
+                                            m_des.skipBytes(pi.messageSetSize);
+                                            continue;
+                                        case ApiError.OffsetOutOfRange:
+                                            import std.format;
+                                            m_queueGroup.removeQueue(queueTopic, queuePartition);
+                                            queue.consumer.throwException(new Exception(format(
+                                                        "Offset %d is out of range for topic %s, partition %d",
+                                                        queue.offset, queueTopic.topic, queuePartition.partition)));
+                                            m_des.skipBytes(pi.messageSetSize);
+                                            continue;
+                                        default: break;
+                                    }
+
+                                    if (pi.messageSetSize > m_client.config.consumerMaxBytes) {
                                         m_queueGroup.removeQueue(queueTopic, queuePartition);
-                                        queue.consumer.throwException(new Exception(format(
-                                                    "Offset %d is out of range for topic %s, partition %d",
-                                                    queue.offset, queueTopic.topic, queuePartition.partition)));
+                                        queue.consumer.throwException(new ProtocolException("MessageSet is too big to fit into a buffer"));
                                         m_des.skipBytes(pi.messageSetSize);
                                         continue;
-                                    default: break;
-                                }
+                                    }
 
-                                if (pi.messageSetSize > m_client.config.consumerMaxBytes) {
-                                    m_queueGroup.removeQueue(queueTopic, queuePartition);
-                                    queue.consumer.throwException(new ProtocolException("MessageSet is too big to fit into a buffer"));
-                                    m_des.skipBytes(pi.messageSetSize);
-                                    continue;
-                                }
+                                    QueueBuffer* qbuf;
 
-                                QueueBuffer* qbuf;
+                                    synchronized (queue.mutex)
+                                        qbuf = queue.getBufferToFill();
 
-                                synchronized (queue.mutex)
-                                    qbuf = queue.getBufferToFill();
+                                    // copy message set to the buffer
+                                    m_des.deserializeSlice(qbuf.buffer[0 .. pi.messageSetSize]);
+                                    qbuf.p = qbuf.buffer;
+                                    qbuf.messageSetSize = pi.messageSetSize;
 
-                                // copy message set to the buffer
-                                m_des.deserializeSlice(qbuf.buffer[0 .. pi.messageSetSize]);
-                                qbuf.p = qbuf.buffer;
-                                qbuf.messageSetSize = pi.messageSetSize;
+                                    // find the next offset to fetch
+                                    long nextOffset = qbuf.findNextOffset();
 
-                                // find the next offset to fetch
-                                long nextOffset = qbuf.findNextOffset();
-
-                                synchronized (queue.mutex) {
-                                    if (nextOffset != -1)
-                                        queue.offset = nextOffset;
-                                    queue.returnFilledBuffer(qbuf);
-                                    // queue.fetchPending is always true here
-                                    if (queue.hasFreeBuffer)
-                                        m_queueGroup.queueHasFreeBuffers(queueTopic, queuePartition);
-                                    else
-                                        queue.fetchPending = false;
+                                    synchronized (queue.mutex) {
+                                        if (nextOffset != -1)
+                                            queue.offset = nextOffset;
+                                        queue.returnFilledBuffer(qbuf);
+                                        // queue.fetchPending is always true here
+                                        if (queue.hasFreeBuffer)
+                                            m_queueGroup.queueHasFreeBuffers(queueTopic, queuePartition);
+                                        else
+                                            queue.fetchPending = false;
+                                    }
                                 }
                             }
                         }
-                    }
-                    break;
-                default: assert(0); // FIXME
+                        break;
+                    default: assert(0); // FIXME
+                }
             }
+        }
+        catch (StreamException ex) {
+            // stream error, typically connection loss
+            m_client.connectionLost(this);
         }
     }
 
