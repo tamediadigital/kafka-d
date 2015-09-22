@@ -3,13 +3,16 @@
 import kafkad.connection;
 import kafkad.protocol;
 import kafkad.exception;
+import kafkad.worker;
+import kafkad.queue;
 import core.time;
 import std.container.dlist;
 import std.exception;
 import vibe.core.core;
 import vibe.core.log;
 public import kafkad.config;
-public import kafkad.consumer.consumer;
+public import kafkad.consumer;
+public import kafkad.producer;
 
 struct BrokerAddress {
     string host;
@@ -30,9 +33,9 @@ class Client {
         Metadata m_metadata;
         bool m_gotMetadata;
 
-        DList!Consumer m_consumers, m_brokerlessConsumers;
+        DList!IWorker m_workers, m_brokerlessWorkers;
         TaskMutex m_mutex;
-        TaskCondition m_brokerlessConsumersEmpty;
+        TaskCondition m_brokerlessWorkersEmpty;
         Task m_connectionManager;
     }
 
@@ -45,12 +48,13 @@ class Client {
     this(BrokerAddress[] bootstrapBrokers, string clientId = format("kafka-d-%d",thisProcessID),
         Configuration config = Configuration())
     {
+        assert(config.producerCompression != Compression.Default, "config.producerCompression must not be Default");
         m_config = config;
         enforce(bootstrapBrokers.length);
         m_bootstrapBrokers = bootstrapBrokers;
         m_clientId = clientId;
         m_mutex = new TaskMutex();
-        m_brokerlessConsumersEmpty = new TaskCondition(m_mutex);
+        m_brokerlessWorkersEmpty = new TaskCondition(m_mutex);
         m_connectionManager = runTask(&connectionManagerMain);
         m_gotMetadata = false;
     }
@@ -165,10 +169,10 @@ class Client {
         return partitions;
     }
 
-    // This task tries to reconnect consumers to the brokers in the background.
-    // When the connection fails or the leader is changed for a partition, the consumer needs to switch
-    // the connection to the other broker. Consumer is added to the brokerlessConsumer list each time
-    // the connection becomes invalid (it's also added upon the Consumer class instantiation).
+    // This task tries to reconnect consumers and producers (workers) to the brokers in the background.
+    // When the connection fails or the leader is changed for a partition, the worker needs to switch
+    // the connection to the other broker. Worker is added to the brokerlessWorkers list each time
+    // the connection becomes invalid (it's also added upon the worker class instantiation).
     // In such situation, consumer queue is still valid and may be processed by the user's task. It may happen
     // that the connection is switched before the queue is exhausted, and the new connection fills the queue up
     // again in a short time, so that the consumer doesn't need to wait for the messages at all. For the consumer,
@@ -176,12 +180,12 @@ class Client {
     private void connectionManagerMain() {
     mainLoop:
         for (;;) {
-            Consumer consumer;
+            IWorker worker;
             synchronized (m_mutex) {
-                while (m_brokerlessConsumers.empty)
-                    m_brokerlessConsumersEmpty.wait();
-                consumer = m_brokerlessConsumers.front;
-                m_brokerlessConsumers.removeFront();
+                while (m_brokerlessWorkers.empty)
+                    m_brokerlessWorkersEmpty.wait();
+                worker = m_brokerlessWorkers.front;
+                m_brokerlessWorkers.removeFront();
             }
 
             PartitionMetadata pm;
@@ -191,11 +195,11 @@ class Client {
             while (!m_config.leaderElectionRetryCount || remainingRetries--) {
                 refreshMetadata();
                 try {
-                    pm = m_metadata.findTopicMetadata(consumer.topic).
-                                    findPartitionMetadata(consumer.partition);
+                    pm = m_metadata.findTopicMetadata(worker.topic).
+                                    findPartitionMetadata(worker.partition);
                 } catch (MetadataException ex) {
                     // no topic and/or partition on this broker
-                    consumer.throwException(ex);
+                    worker.throwException(ex);
                     continue mainLoop;
                 }
                 if (pm.leader >= 0)
@@ -205,56 +209,82 @@ class Client {
 
             if (pm.leader < 0) {
                 // all retries failed, we still dont have a leader for the consumer's topic/partition
-                consumer.throwException(new Exception("Leader election timed out"));
+                worker.throwException(new Exception("Leader election timed out"));
                 continue;
             }
 
             try {
                 BrokerConnection conn = getConn(pm.leader);
-                if (consumer.queue.offset < 0) {
-                    // get earliest or latest offset
-                    auto offset = conn.getStartingOffset(consumer.topic, consumer.partition, consumer.queue.offset);
-                    consumer.queue.offset = offset;
+                auto consumer = cast(Consumer)worker;
+                if (consumer) {
+                    if (consumer.queue.offset < 0) {
+                        // get earliest or latest offset
+                        auto offset = conn.getStartingOffset(consumer.topic, consumer.partition, consumer.queue.offset);
+                        consumer.queue.offset = offset;
+                    }
+                    conn.consumerRequestBundler.addQueue(consumer.queue, BufferType.Free);
+                } else {
+                    auto producer = cast(Producer)worker;
+                    assert(producer);
+                    conn.producerRequestBundler.addQueue(producer.queue, BufferType.Filled);
                 }
-                conn.queueGroup.addQueue(consumer.queue);
             } catch (ConnectionException) {
                 // couldn't connect to the leader
-                consumer.throwException(new Exception("Couldn't connect to the leader broker"));
+                worker.throwException(new Exception("Couldn't connect to the leader broker"));
             }
         }
     }
 
+    private void checkWorkerExistence(IWorker worker, string name) {
+        foreach (w; m_workers) {
+            if (w.workerType == worker.workerType && w.topic == worker.topic && w.partition == worker.partition)
+                throw new Exception(format("This client already has a %s for topic %s and partition %d",
+                        name, w.topic, w.partition));
+        }
+    }
+    
 package: // functions below are used by the consumer and producer classes
 
     void addNewConsumer(Consumer consumer) {
         synchronized (m_mutex) {
-            foreach (c; m_consumers) {
-                if (c.topic == consumer.topic && c.partition == consumer.partition)
-                    throw new Exception(format("This client already has a consumer for topic %s and partition %d",
-                        c.topic, c.partition));
-            }
-            m_consumers.insertBack(consumer);
-            m_brokerlessConsumers.insertBack(consumer);
-            m_brokerlessConsumersEmpty.notify();
+            checkWorkerExistence(consumer, "consumer");
+            m_workers.insertBack(consumer);
+            m_brokerlessWorkers.insertBack(consumer);
+            m_brokerlessWorkersEmpty.notify();
+        }
+    }
+
+    void addNewProducer(Producer producer) {
+        synchronized (m_mutex) {
+            checkWorkerExistence(producer, "producer");
+            m_workers.insertBack(producer);
+            m_brokerlessWorkers.insertBack(producer);
+            m_brokerlessWorkersEmpty.notify();
         }
     }
 
     void connectionLost(BrokerConnection conn) {
-        synchronized (m_mutex, conn.queueGroup.mutex) {
+        synchronized (m_mutex, conn.consumerRequestBundler.mutex, conn.producerRequestBundler.mutex) {
             foreach (pair; m_conns.byKeyValue) {
                 if (pair.value == conn) {
                     m_conns.remove(pair.key);
                     break;
                 }
             }
-            foreach (q; &conn.queueGroup.queues) {
-                m_brokerlessConsumers.insertBack(q.consumer);
-                synchronized (q.consumer.queue) {
-                    q.consumer.queue.queueGroup = null;
-                    q.consumer.queue.fetchPending = false;
+            foreach (q; &conn.consumerRequestBundler.queues) {
+                m_brokerlessWorkers.insertBack(q.worker);
+                synchronized (q.mutex) {
+                    q.requestBundler = null;
+                    q.requestPending = false;
                 }
             }
-            m_brokerlessConsumersEmpty.notify();
+            foreach (q; &conn.producerRequestBundler.queues) {
+                m_brokerlessWorkers.insertBack(q.worker);
+                synchronized (q.mutex) {
+                    q.requestBundler = null;
+                    q.requestPending = false;
+                }
+            }
         }
     }
 }

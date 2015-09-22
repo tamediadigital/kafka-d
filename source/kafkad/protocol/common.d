@@ -17,8 +17,6 @@ public import vibe.core.stream;
 public import kafkad.client;
 import kafkad.exception;
 
-//package:
-
 enum ApiKey : short {
     ProduceRequest = 0,
     FetchRequest = 1,

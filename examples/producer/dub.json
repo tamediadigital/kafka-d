@@ -1,0 +1,9 @@
+{
+    "name": "producer",
+    "description": "Kafka producer example",
+    "authors": [ "Piotr Szturmaj" ],
+    "dependencies": {
+        "kafka-d": {"version": "~master", "path": "../../"}
+    },
+    "versions": ["VibeCustomMain"]
+}

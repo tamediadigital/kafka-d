@@ -1,8 +1,9 @@
-﻿module kafkad.consumer.consumer;
+﻿module kafkad.consumer;
 
 import kafkad.client;
 import kafkad.exception;
-import kafkad.consumer.queue;
+import kafkad.queue;
+import kafkad.worker;
 import std.exception;
 import core.atomic;
 
@@ -19,7 +20,7 @@ struct Message {
     ubyte[] value;
 }
 
-class Consumer {
+class Consumer : IWorker {
     private {
         Client m_client;
         string m_topic;
@@ -30,22 +31,27 @@ class Consumer {
 
     package (kafkad) {
         @property queue() { return m_queue; }
-        /// Throws an exception in the consumer task. This is used to pass the connection exceptions to the user.
-        void throwException(Exception ex) {
-            synchronized (m_queue.mutex)
-                m_queue.appendExceptionBuffer(ex);
+    }
+
+    /// Throws an exception in the consumer task. This is used to pass the connection exceptions to the user.
+    void throwException(Exception ex) {
+        synchronized (m_queue.mutex) {
+            m_queue.returnBuffer(BufferType.Filled, new QueueBuffer(ex));
+            m_queue.condition.notify();
         }
     }
 
-    @property auto topic() { return m_topic; }
-    @property auto partition() { return m_partition; }
+    @property string topic() { return m_topic; }
+    @property int partition() { return m_partition; }
+
+    @property WorkerType workerType() { return WorkerType.Consumer; }
 
     this(Client client, string topic, int partition, Offset startingOffset) {
         enforce(startingOffset >= -2);
         m_client = client;
         m_topic = topic;
         m_partition = partition;
-        m_queue = new Queue(this, client.config);
+        m_queue = new Queue(this, m_client.config.consumerQueueBuffers, m_client.config.consumerMaxBytes);
         m_queue.offset = startingOffset;
         m_currentBuffer = null;
 
@@ -53,8 +59,11 @@ class Consumer {
     }
 
     Message getMessage() {
-        if (!m_currentBuffer)
-            m_currentBuffer = m_queue.waitForFilledBuffer();
+        if (!m_currentBuffer) {
+            synchronized (m_queue.mutex) {
+                m_currentBuffer = m_queue.waitForBuffer(BufferType.Filled);
+            }
+        }
     processBuffer:
         if (m_currentBuffer.messageSetSize > 12 /* Offset + Message Size */) {
             import std.bitmanip, std.digest.crc;
@@ -109,12 +118,20 @@ class Consumer {
                 }
             } else {
                 // this is the last, partial message, skip it
-                m_currentBuffer = m_queue.waitForFilledBuffer();
+                synchronized (m_queue.mutex) {
+                    m_queue.returnBuffer(BufferType.Free, m_currentBuffer);
+                    m_queue.notifyRequestBundler();
+                    m_currentBuffer = m_queue.waitForBuffer(BufferType.Filled);
+                }
                 goto processBuffer;
             }
         } else {
             // no more messages, get next buffer
-            m_currentBuffer = m_queue.waitForFilledBuffer();
+            synchronized (m_queue.mutex) {
+                m_queue.returnBuffer(BufferType.Free, m_currentBuffer);
+                m_queue.notifyRequestBundler();
+                m_currentBuffer = m_queue.waitForBuffer(BufferType.Filled);
+            }
             goto processBuffer;
         }
     }

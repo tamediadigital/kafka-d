@@ -4,7 +4,9 @@
     "copyright": "Copyright © 2015 Tamedia AG",
     "authors": ["Piotr Szturmaj"],
     "dependencies": {
-        "vibe-d": "~>0.7.25-rc.1"
+        "vibe-d": "~>0.7.25"
     },
-    "targetType": "library"
+    "libs": ["snappy"],
+    "targetType": "library",
+    "subConfigurations": { "vibe-d": "libasync"}
 }

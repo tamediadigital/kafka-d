@@ -3,7 +3,8 @@
 import kafkad.protocol.common;
 import kafkad.config;
 import kafkad.exception;
-import kafkad.consumer.group;
+import kafkad.bundler;
+import kafkad.queue;
 
 /* serialize data up to ChunkSize, this is not zero-copy unfortunately, as vibe.d's drivers and kernel may do
  * buffering on their own, however, it should minimize the overhead of many, small write() calls to the driver */
@@ -24,9 +25,10 @@ struct Serializer {
     }
 
     void flush() {
-        assert(p - chunk);
-        stream.write(chunk[0 .. p - chunk]).rethrow!StreamException("Serializer.flush() failed");
-        p = chunk;
+        if (p - chunk) {
+            stream.write(chunk[0 .. p - chunk]).rethrow!StreamException("Serializer.flush() failed");
+            p = chunk;
+        }
     }
 
     void check(size_t needed) {
@@ -51,35 +53,40 @@ struct Serializer {
         p = cast(ubyte*)pt;
     }
 
-    private void serializeSlice(const(ubyte)[] s) {
-        auto slice = s;
-        if (slice.length > chunkSize) {
-            if (p - chunk)
+    void serializeSlice(const(ubyte)[] s) {
+        if (p - chunk) {
+            auto rem = end - p;
+            auto toCopy = min(rem, s.length);
+            core.stdc.string.memcpy(p, s.ptr, toCopy);
+            p += toCopy;
+            s = s[toCopy .. $];
+            if (p == end)
                 flush();
-            while (slice.length > chunkSize) {
-                stream.write(slice[0 .. chunkSize]).rethrow!StreamException("Serializer.serializeSlice() failed");
-                slice = slice[chunkSize .. $];
+        }
+        if (s.length) {
+            if (s.length >= chunkSize) {
+                stream.write(s).rethrow!StreamException("Serializer.serializeSlice() failed");
+            } else {
+                core.stdc.string.memcpy(chunk, s.ptr, s.length);
+                p = chunk + s.length;
             }
         }
-        check(slice.length);
-        core.stdc.string.memcpy(p, slice.ptr, slice.length);
-        p += slice.length;
     }
 
     void serialize(string s) {
-        enforce(s.length <= short.max, "UTF8 string must not be longer than 32767 bytes");
+        assert(s.length <= short.max, "UTF8 string must not be longer than 32767 bytes");
         serialize(cast(short)s.length);
         serializeSlice(cast(ubyte[])s);
     }
 
     void serialize(const(ubyte)[] s) {
-        enforce(s.length <= int.max, "Byte array must not be larger than 4 GB"); // just in case
+        assert(s.length <= int.max, "Byte array must not be larger than 4 GB"); // just in case
         serialize(cast(int)s.length);
         serializeSlice(s);
     }
 
     private void arrayLength(size_t length) {
-        enforce(length <= int.max, "Arrays must not be longer that 2^31 items"); // just in case, maybe set some configurable (and saner) limits?
+        assert(length <= int.max, "Arrays must not be longer that 2^31 items"); // just in case, maybe set some configurable (and saner) limits?
         serialize(cast(int)length);
     }
 
@@ -123,12 +130,12 @@ struct Serializer {
     }
 
     // version 0
-    void fetchRequest_v0(int correlationId, string clientId, in Configuration config, QueueGroup queueGroup) {
+    void fetchRequest_v0(int correlationId, string clientId, in Configuration config, RequestBundler requestBundler) {
         size_t topics = 0;
         auto size = 4 + 4 + 4 + arrayOverhead;
-        GroupTopic* t = queueGroup.fetchRequestTopicsFront;
+        Topic* t = requestBundler.requestTopicsFront;
         while (t) {
-            size += stringSize(t.topic) + arrayOverhead + t.partitionsInFetchRequest * (4 + 8 + 4);
+            size += stringSize(t.topic) + arrayOverhead + t.partitionsInRequest * (4 + 8 + 4);
             ++topics;
             t = t.next;
         }
@@ -137,15 +144,58 @@ struct Serializer {
         serialize!int(config.consumerMaxWaitTime); // MaxWaitTime
         serialize!int(config.consumerMinBytes); // MinBytes
         arrayLength(topics);
-        t = queueGroup.fetchRequestTopicsFront;
+        t = requestBundler.requestTopicsFront;
         while (t) {
             serialize(t.topic);
-            arrayLength(t.partitionsInFetchRequest);
-            GroupPartition* p = t.fetchRequestPartitionsFront;
+            arrayLength(t.partitionsInRequest);
+            Partition* p = t.requestPartitionsFront;
             while (p) {
                 serialize(p.partition);
                 serialize(p.queue.offset);
                 serialize!int(config.consumerMaxBytes); // MaxBytes
+                p = p.next;
+            }
+            t = t.next;
+        }
+    }
+
+    // version 0
+    void produceRequest_v0(int correlationId, string clientId, in Configuration config, RequestBundler requestBundler) {
+        size_t topics = 0;
+        auto size = 2 + 4 + arrayOverhead;
+        Topic* t = requestBundler.requestTopicsFront;
+        while (t) {
+            size += stringSize(t.topic) + arrayOverhead + t.partitionsInRequest * (4 + 4);
+            Partition* p = t.requestPartitionsFront;
+            while (p) {
+                synchronized (p.queue.mutex) {
+                    p.buffer = p.queue.getBuffer(BufferType.Filled);
+                }
+                size += p.buffer.filled;
+                p = p.next;
+            }
+            ++topics;
+            t = t.next;
+        }
+        import vibe.core.log; logDebug("produce request size: %d", size);
+        request(size, ApiKey.ProduceRequest, 0, correlationId, clientId);
+        serialize!short(config.producerRequiredAcks); // RequiredAcks
+        serialize!int(config.produceRequestTimeout); // Timeout
+        arrayLength(topics);
+        t = requestBundler.requestTopicsFront;
+        while (t) {
+            serialize(t.topic);
+            arrayLength(t.partitionsInRequest);
+            Partition* p = t.requestPartitionsFront;
+            while (p) {
+                serialize!int(p.partition);
+                serialize!int(cast(int)p.buffer.filled);
+                serializeSlice(p.buffer.filledSlice);
+                synchronized (p.queue.mutex) {
+                    p.buffer.rewind();
+                    p.queue.returnBuffer(BufferType.Free, p.buffer);
+                    p.queue.condition.notify();
+                }
                 p = p.next;
             }
             t = t.next;

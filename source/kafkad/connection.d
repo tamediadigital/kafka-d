@@ -3,19 +3,20 @@
 import kafkad.client;
 import kafkad.protocol;
 import kafkad.exception;
-import kafkad.consumer.queue;
-import kafkad.consumer.group;
+import kafkad.bundler;
+import kafkad.queue;
 import kafkad.utils.lists;
 import vibe.core.core;
 import vibe.core.net;
 import vibe.core.task;
 import vibe.core.sync;
 import vibe.core.concurrency;
+import std.format;
 import core.time;
 
 package:
 
-enum RequestType { Metadata, Fetch, Offset };
+enum RequestType { Metadata, Fetch, Produce, Offset };
 
 struct Request {
     RequestType type;
@@ -31,9 +32,10 @@ class BrokerConnection {
         Serializer m_ser;
         Deserializer m_des;
         TaskMutex m_mutex;
-        QueueGroup m_queueGroup;
+        RequestBundler m_consumerRequestBundler;
+        RequestBundler m_producerRequestBundler;
         FreeList!Request m_requests;
-        Task m_fetcherTask, m_receiverTask;
+        Task m_fetcherTask, m_pusherTask, m_receiverTask;
         ubyte[] m_topicNameBuffer;
     }
 
@@ -43,9 +45,8 @@ class BrokerConnection {
         return m_conn.remoteAddress.rethrow!ConnectionException("Could not get connection's remote address");
     }
 
-    @property QueueGroup queueGroup() {
-        return m_queueGroup;
-    }
+    @property RequestBundler consumerRequestBundler() { return m_consumerRequestBundler; }
+    @property RequestBundler producerRequestBundler() { return m_producerRequestBundler; }
 
     this(Client client, TCPConnection conn) {
         m_client = client;
@@ -53,8 +54,10 @@ class BrokerConnection {
         m_ser = Serializer(conn, client.config.serializerChunkSize);
         m_des = Deserializer(conn, client.config.deserializerChunkSize);
         m_mutex = new TaskMutex();
-        m_queueGroup = new QueueGroup();
+        m_consumerRequestBundler = new RequestBundler();
+        m_producerRequestBundler = new RequestBundler();
         m_fetcherTask = runTask(&fetcherMain);
+        m_pusherTask = runTask(&pusherMain);
         m_receiverTask = runTask(&receiverMain);
         m_topicNameBuffer = new ubyte[short.max];
     }
@@ -65,13 +68,13 @@ class BrokerConnection {
         MonoTime startTime;
         for (;;) {
             // send requests
-            synchronized (m_queueGroup.mutex) {
+            synchronized (m_consumerRequestBundler.mutex) {
                 if (!gotFirstRequest) {
                     // wait for the first fetch request
-                    while (!m_queueGroup.fetchRequestTopicsFront) {
-                        m_queueGroup.freeCondition.wait();
+                    while (!m_consumerRequestBundler.requestTopicsFront) {
+                        m_consumerRequestBundler.readyCondition.wait();
                     }
-                    if (m_queueGroup.requestsInGroup < m_client.config.fetcherBundleMinRequests) {
+                    if (m_consumerRequestBundler.requestsCollected < m_client.config.fetcherBundleMinRequests) {
                         gotFirstRequest = true;
                         // start the timer
                         startTime = MonoTime.currTime;
@@ -80,19 +83,19 @@ class BrokerConnection {
                     }
                 } else {
                     // wait up to configured wait time or up to configured request count
-                    while (m_queueGroup.requestsInGroup < m_client.config.fetcherBundleMinRequests) {
+                    while (m_consumerRequestBundler.requestsCollected < m_client.config.fetcherBundleMinRequests) {
                         Duration elapsedTime = MonoTime.currTime - startTime;
                         if (elapsedTime >= m_client.config.fetcherBundleMaxWaitTime.msecs)
                             break; // timeout reached
                         Duration remaining = m_client.config.fetcherBundleMaxWaitTime.msecs - elapsedTime;
-                        if (!m_queueGroup.freeCondition.wait(remaining))
+                        if (!m_consumerRequestBundler.readyCondition.wait(remaining))
                             break; // timeout reached
                     }
                     gotFirstRequest = false;
                 }
 
                 synchronized (m_mutex) {
-                    m_ser.fetchRequest_v0(0, m_client.clientId, m_client.config, m_queueGroup);
+                    m_ser.fetchRequest_v0(0, m_client.clientId, m_client.config, m_consumerRequestBundler);
                     m_ser.flush();
 
                     // add request for each fetch
@@ -101,7 +104,55 @@ class BrokerConnection {
                     m_requests.pushFilledNode(req);
                 }
 
-                m_queueGroup.clearFetchRequestLists();
+                m_consumerRequestBundler.clearRequestLists();
+            }
+        }
+    }
+
+    void pusherMain() {
+        int size, correlationId;
+        bool gotFirstRequest = false;
+        MonoTime startTime;
+        for (;;) {
+            import vibe.core.log;
+            // send requests
+            synchronized (m_producerRequestBundler.mutex) {
+                if (!gotFirstRequest) {
+                    // wait for the first produce request
+                    while (!m_producerRequestBundler.requestTopicsFront) {
+                        m_producerRequestBundler.readyCondition.wait();
+                    }
+                    if (m_producerRequestBundler.requestsCollected < m_client.config.pusherBundleMinRequests) {
+                        gotFirstRequest = true;
+                        // start the timer
+                        startTime = MonoTime.currTime;
+                        // wait for more requests
+                        continue;
+                    }
+                } else {
+                    // wait up to configured wait time or up to configured request count
+                    while (m_producerRequestBundler.requestsCollected < m_client.config.pusherBundleMinRequests) {
+                        Duration elapsedTime = MonoTime.currTime - startTime;
+                        if (elapsedTime >= m_client.config.pusherBundleMaxWaitTime.msecs)
+                            break; // timeout reached
+                        Duration remaining = m_client.config.pusherBundleMaxWaitTime.msecs - elapsedTime;
+                        if (!m_producerRequestBundler.readyCondition.wait(remaining))
+                            break; // timeout reached
+                    }
+                    gotFirstRequest = false;
+                }
+                
+                synchronized (m_mutex) {
+                    m_ser.produceRequest_v0(0, m_client.clientId, m_client.config, m_producerRequestBundler);
+                    m_ser.flush();
+                    
+                    // add request for each fetch
+                    auto req = m_requests.getNodeToFill();
+                    req.type = RequestType.Produce;
+                    m_requests.pushFilledNode(req);
+                }
+                
+                m_producerRequestBundler.clearRequestLists();
             }
         }
     }
@@ -154,33 +205,34 @@ class BrokerConnection {
                             m_des.deserialize(numpartitions);
                             assert(numpartitions > 0);
 
-                            synchronized (m_queueGroup.mutex) {
-                                GroupTopic* queueTopic = m_queueGroup.findTopic(topic);
+                            synchronized (m_consumerRequestBundler.mutex) {
+                                Topic* queueTopic = m_consumerRequestBundler.findTopic(topic);
 
                                 foreach (np; 0 .. numpartitions) {
-                                    static struct PartitionInfo {
+                                    static struct FetchPartitionInfo {
                                         int partition;
                                         short errorCode;
                                         long endOffset;
                                         int messageSetSize;
                                     }
-                                    PartitionInfo pi;
-                                    m_des.deserialize(pi);
+                                    FetchPartitionInfo fpi;
+                                    m_des.deserialize(fpi);
 
-                                    GroupPartition* queuePartition = null;
+                                    Partition* queuePartition = null;
                                     if (queueTopic)
-                                        queuePartition = queueTopic.findPartition(pi.partition);
+                                        queuePartition = queueTopic.findPartition(fpi.partition);
 
                                     if (!queuePartition) {
                                         // skip the partition
-                                        m_des.skipBytes(pi.messageSetSize);
+                                        m_des.skipBytes(fpi.messageSetSize);
                                         continue;
                                     }
 
                                     Queue queue = queuePartition.queue;
 
                                     // TODO: handle errorCode
-                                    switch (cast(ApiError)pi.errorCode) {
+                                    switch (cast(ApiError)fpi.errorCode) {
+                                        case ApiError.NoError: break;
                                         case ApiError.UnknownTopicOrPartition:
                                         case ApiError.LeaderNotAvailable:
                                         case ApiError.NotLeaderForPartition:
@@ -188,36 +240,35 @@ class BrokerConnection {
                                             // retry the request. To do so, we remove the consumer from this
                                             // connection and add it to the client brokerlessConsumers list.
                                             // The client will do the rest.
-                                            m_queueGroup.removeQueue(queueTopic, queuePartition);
-                                            m_des.skipBytes(pi.messageSetSize);
+                                            m_consumerRequestBundler.removeQueue(queueTopic, queuePartition);
+                                            m_des.skipBytes(fpi.messageSetSize);
                                             continue;
                                         case ApiError.OffsetOutOfRange:
-                                            import std.format;
-                                            m_queueGroup.removeQueue(queueTopic, queuePartition);
-                                            queue.consumer.throwException(new Exception(format(
+                                            m_consumerRequestBundler.removeQueue(queueTopic, queuePartition);
+                                            queue.worker.throwException(new Exception(format(
                                                         "Offset %d is out of range for topic %s, partition %d",
                                                         queue.offset, queueTopic.topic, queuePartition.partition)));
-                                            m_des.skipBytes(pi.messageSetSize);
+                                            m_des.skipBytes(fpi.messageSetSize);
                                             continue;
-                                        default: break;
+                                        default: throw new ProtocolException(format("Unexpected fetch response error: %d", fpi.errorCode));
                                     }
 
-                                    if (pi.messageSetSize > m_client.config.consumerMaxBytes) {
-                                        m_queueGroup.removeQueue(queueTopic, queuePartition);
-                                        queue.consumer.throwException(new ProtocolException("MessageSet is too big to fit into a buffer"));
-                                        m_des.skipBytes(pi.messageSetSize);
+                                    if (fpi.messageSetSize > m_client.config.consumerMaxBytes) {
+                                        m_consumerRequestBundler.removeQueue(queueTopic, queuePartition);
+                                        queue.worker.throwException(new ProtocolException("MessageSet is too big to fit into a buffer"));
+                                        m_des.skipBytes(fpi.messageSetSize);
                                         continue;
                                     }
 
                                     QueueBuffer* qbuf;
 
                                     synchronized (queue.mutex)
-                                        qbuf = queue.getBufferToFill();
+                                        qbuf = queue.getBuffer(BufferType.Free);
 
                                     // copy message set to the buffer
-                                    m_des.deserializeSlice(qbuf.buffer[0 .. pi.messageSetSize]);
+                                    m_des.deserializeSlice(qbuf.buffer[0 .. fpi.messageSetSize]);
                                     qbuf.p = qbuf.buffer;
-                                    qbuf.messageSetSize = pi.messageSetSize;
+                                    qbuf.messageSetSize = fpi.messageSetSize;
 
                                     // find the next offset to fetch
                                     long nextOffset = qbuf.findNextOffset();
@@ -225,12 +276,80 @@ class BrokerConnection {
                                     synchronized (queue.mutex) {
                                         if (nextOffset != -1)
                                             queue.offset = nextOffset;
-                                        queue.returnFilledBuffer(qbuf);
+                                        queue.returnBuffer(BufferType.Filled, qbuf);
+                                        queue.condition.notify();
                                         // queue.fetchPending is always true here
-                                        if (queue.hasFreeBuffer)
-                                            m_queueGroup.queueHasFreeBuffers(queueTopic, queuePartition);
+                                        if (queue.hasBuffer(BufferType.Free))
+                                            m_consumerRequestBundler.queueHasReadyBuffers(queueTopic, queuePartition);
                                         else
-                                            queue.fetchPending = false;
+                                            queue.requestPending = false;
+                                    }
+                                }
+                            }
+                        }
+                        break;
+                    case RequestType.Produce:
+                        int numtopics;
+                        m_des.deserialize(numtopics);
+                        assert(numtopics > 0);
+                        foreach (nt; 0 .. numtopics) {
+                            string topic;
+                            int numpartitions;
+                            short topicNameLen;
+                            m_des.deserialize(topicNameLen);
+                            
+                            ubyte[] topicSlice = m_topicNameBuffer[0 .. topicNameLen];
+                            m_des.deserializeSlice(topicSlice);
+                            topic = cast(string)topicSlice;
+                            m_des.deserialize(numpartitions);
+                            assert(numpartitions > 0);
+                            
+                            synchronized (m_producerRequestBundler.mutex) {
+                                Topic* queueTopic = m_producerRequestBundler.findTopic(topic);
+
+                                foreach (np; 0 .. numpartitions) {
+                                    static struct ProducePartitionInfo {
+                                        int partition;
+                                        short errorCode;
+                                        long offset;
+                                    }
+                                    ProducePartitionInfo ppi;
+                                    m_des.deserialize(ppi);
+                                    
+                                    Partition* queuePartition = null;
+                                    if (queueTopic)
+                                        queuePartition = queueTopic.findPartition(ppi.partition);
+
+                                    assert(queuePartition);
+                                    if (!queuePartition) {
+                                        // skip the partition
+                                        continue;
+                                    }
+                                    
+                                    // TODO: handle errorCode
+                                    switch (cast(ApiError)ppi.errorCode) {
+                                        case ApiError.NoError: break;
+                                        case ApiError.UnknownTopicOrPartition:
+                                        case ApiError.LeaderNotAvailable:
+                                        case ApiError.NotLeaderForPartition:
+                                            // We need to refresh the metadata, get the new connection and
+                                            // retry the request. To do so, we remove the producer from this
+                                            // connection and add it to the client brokerlessWorkers list.
+                                            // The client will do the rest.
+                                            m_producerRequestBundler.removeQueue(queueTopic, queuePartition);
+                                            continue;
+                                        default: throw new ProtocolException(format("Unexpected produce response error: %d", ppi.errorCode));
+                                    }
+
+                                    Queue queue = queuePartition.queue;
+
+                                    synchronized (queue.mutex) {
+                                        //queue.returnBuffer(BufferType.Filled);
+                                        // queue.requestPending is always true here
+                                        if (queue.hasBuffer(BufferType.Filled))
+                                            m_producerRequestBundler.queueHasReadyBuffers(queueTopic, queuePartition);
+                                        else
+                                            queue.requestPending = false;
                                     }
                                 }
                             }
