@@ -10,3 +10,11 @@ __dummy.html
 *.suo
 *.visualdproj
 *.userprefs
+*.a
+dub.selections.json
+kafka-d.sublime-project
+examples/consumer/consumer.sublime-project
+examples/producer/producer.sublime-project
+__test__library__
+examples/consumer/consumer
+examples/producer/producer
