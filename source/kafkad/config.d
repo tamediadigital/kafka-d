@@ -59,10 +59,7 @@ struct Configuration {
 }
 
 enum Compression {
-    Default = -1,
     None = 0,
     GZIP = 1,
     Snappy = 2,
 }
-
-int DefaultCompressionLevel = -1;

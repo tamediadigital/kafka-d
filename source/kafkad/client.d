@@ -75,7 +75,6 @@ class Client {
     this(BrokerAddress[] bootstrapBrokers, string clientId = format("kafka-d-%d",thisProcessID),
         Configuration config = Configuration())
     {
-        assert(config.producerCompression != Compression.Default, "config.producerCompression must not be Default");
         m_config = config;
         enforce(bootstrapBrokers.length);
         m_bootstrapBrokers = bootstrapBrokers;

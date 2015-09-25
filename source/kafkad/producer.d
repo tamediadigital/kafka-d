@@ -60,8 +60,7 @@ class Producer : IWorker {
     ///     compressionLevel = valid only for GZIP compression, compression level between
     ///                        1 and 9: 1 gives best speed, 9 gives best compression, it uses
     ///                        config.producerCompressionLevel by default
-    this(Client client, string topic, int partition, Compression compression = Compression.Default,
-            int compressionLevel = DefaultCompressionLevel) {
+    this(Client client, string topic, int partition, Compression compression, int compressionLevel) {
         m_client = client;
         m_topic = topic;
         m_partition = partition;
@@ -69,15 +68,12 @@ class Producer : IWorker {
         m_currentBuffer = null;
         m_batchCondition = new TaskCondition(m_queue.mutex);
         m_batchStarted = false;
-        m_compression = compression == Compression.Default ? m_client.config.producerCompression : compression;
         m_compressionBuffer = m_compression != Compression.None ? new QueueBuffer(m_client.config.producerMaxBytes) : null;
         if (m_compression == Compression.GZIP) {
             m_zlibContext = new z_stream;
             m_zlibContext.zalloc = null;
             m_zlibContext.zfree = null;
             m_zlibContext.opaque = null;
-            if (compressionLevel == DefaultCompressionLevel)
-                compressionLevel = m_client.config.producerCompressionLevel;
             enforce(deflateInit2(m_zlibContext, compressionLevel, Z_DEFLATED, 15 + 16, 8, Z_DEFAULT_STRATEGY) == Z_OK);
         }
         scope (failure) if (m_compression == Compression.GZIP)
@@ -85,6 +81,23 @@ class Producer : IWorker {
 
         client.addNewProducer(this);
         runTask(&batcherMain);
+    }
+
+    /// Params:
+    ///     client = the client instance
+    ///     topic = producer topic
+    ///     partition = producer partition
+    ///     compression = the compression type, it uses config.producerCompression by default
+    this(Client client, string topic, int partition, Compression compression) {
+        this(client, topic, partition, compression, client.config.producerCompressionLevel);
+    }
+
+    /// Params:
+    ///     client = the client instance
+    ///     topic = producer topic
+    ///     partition = producer partition
+    this(Client client, string topic, int partition) {
+        this(client, topic, partition, client.config.producerCompression);
     }
 
     ~this() {
