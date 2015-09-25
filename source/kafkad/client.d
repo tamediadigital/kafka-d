@@ -8,6 +8,7 @@ import kafkad.queue;
 import core.time;
 import std.container.dlist;
 import std.exception;
+import std.conv;
 import vibe.core.core;
 import vibe.core.log;
 public import kafkad.config;
@@ -17,6 +18,32 @@ public import kafkad.producer;
 struct BrokerAddress {
     string host;
     ushort port;
+
+    this(string host, ushort port)
+    {
+        this.host = host;
+        this.port = port;
+    }
+    
+    this(string address)
+    {
+        import std.algorithm : splitter;
+        import std.array : array;
+        auto splitted = address.splitter(":").array;
+        enforce(splitted.length == 2, "BrokerAddress supplied is incomplete");
+        this.host = splitted[0];
+        this.port = splitted[1].to!ushort;
+    }
+}
+
+unittest 
+{   
+    string hostname = "127.0.0.1";
+    ushort port = 9292;
+    auto address = hostname ~ ":" ~ port.to!string;
+    auto b = BrokerAddress(address);
+    assert(b.host == hostname, "hostname in BrokerAddress constructor not working");
+    assert(b.port == port, "port in BrokerAddress constructor not working");
 }
 
 /// The client acts as a router between brokers, consumers and producers. Consumers and producers
