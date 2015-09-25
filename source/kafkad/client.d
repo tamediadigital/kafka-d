@@ -219,12 +219,16 @@ class Client {
             // get the new partition metadata and wait for leader election if needed
             auto remainingRetries = m_config.leaderElectionRetryCount;
             while (!m_config.leaderElectionRetryCount || remainingRetries--) {
-                refreshMetadata();
                 try {
+                    refreshMetadata();
                     pm = m_metadata.findTopicMetadata(worker.topic).
                                     findPartitionMetadata(worker.partition);
                 } catch (MetadataException ex) {
                     // no topic and/or partition on this broker
+                    worker.throwException(ex);
+                    continue mainLoop;
+                } catch (ConnectionException ex) {
+                    // couldn't connect to the broker
                     worker.throwException(ex);
                     continue mainLoop;
                 }
