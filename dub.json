@@ -7,6 +7,5 @@
         "vibe-d": "~>0.7.25"
     },
     "libs": ["snappy"],
-    "targetType": "library",
-    "subConfigurations": { "vibe-d": "libasync"}
+    "targetType": "library"
 }
