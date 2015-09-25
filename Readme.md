@@ -1,12 +1,8 @@
-Kafka-d is a D Kafka client.
+Kafka-d is a D Kafka client that depends on the vibe.d framework.
 
-
-##### Working:
-* Consumer
 
 ##### Not Working:
 * Compression
-* Producer
 
 #### Usage
 First, bootstrap the client:
@@ -19,8 +15,18 @@ while (!client.connect()) {
 }
 writeln("Connected!");
 ```
+
+##### Producing
+for a full working example check ```examples/producer/src/app.d```
+```D
+	Producer producer = new Producer(client, topic, partition);
+	string key = "myKey";
+	string value = "myValue";
+	producer.pushMessage(cast(ubyte[])key, cast(ubyte[])value);
+```
+
 ##### Consuming
-For each topic partition, run a worker task:
+For each topic and partition, run a worker task:
 
 ```D
 runWorkerTask((Client client, string topic, int partition) {
