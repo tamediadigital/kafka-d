@@ -13,6 +13,7 @@ struct QueueBuffer {
     ubyte* buffer, p, end;
     size_t messageSetSize;
     Exception exception;
+    long requestedOffset;
 
     QueueBuffer* next;
 
