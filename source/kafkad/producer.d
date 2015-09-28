@@ -68,6 +68,7 @@ class Producer : IWorker {
         m_currentBuffer = null;
         m_batchCondition = new TaskCondition(m_queue.mutex);
         m_batchStarted = false;
+        m_compression = compression;
         m_compressionBuffer = m_compression != Compression.None ? new QueueBuffer(m_client.config.producerMaxBytes) : null;
         if (m_compression == Compression.GZIP) {
             m_zlibContext = new z_stream;

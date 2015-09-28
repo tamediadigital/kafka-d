@@ -56,10 +56,10 @@ class BrokerConnection {
         m_mutex = new TaskMutex();
         m_consumerRequestBundler = new RequestBundler();
         m_producerRequestBundler = new RequestBundler();
+        m_topicNameBuffer = new ubyte[short.max];
         m_fetcherTask = runTask(&fetcherMain);
         m_pusherTask = runTask(&pusherMain);
         m_receiverTask = runTask(&receiverMain);
-        m_topicNameBuffer = new ubyte[short.max];
     }
 
     void fetcherMain() {
@@ -260,6 +260,13 @@ class BrokerConnection {
                                         continue;
                                     }
 
+                                    if (fpi.messageSetSize < 26) {
+                                        // we got a message set that is smaller than minimum message size, make another request
+                                        m_consumerRequestBundler.queueHasReadyBuffers(queueTopic, queuePartition);
+                                        m_des.skipBytes(fpi.messageSetSize);
+                                        continue;
+                                    }
+
                                     QueueBuffer* qbuf;
 
                                     synchronized (queue.mutex)
@@ -269,13 +276,14 @@ class BrokerConnection {
                                     m_des.deserializeSlice(qbuf.buffer[0 .. fpi.messageSetSize]);
                                     qbuf.p = qbuf.buffer;
                                     qbuf.messageSetSize = fpi.messageSetSize;
+                                    qbuf.requestedOffset = queue.offset;
 
                                     // find the next offset to fetch
                                     long nextOffset = qbuf.findNextOffset();
+                                    enforce(nextOffset > 0);
 
                                     synchronized (queue.mutex) {
-                                        if (nextOffset != -1)
-                                            queue.offset = nextOffset;
+                                        queue.offset = nextOffset;
                                         queue.returnBuffer(BufferType.Filled, qbuf);
                                         queue.condition.notify();
                                         // queue.fetchPending is always true here
