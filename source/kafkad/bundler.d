@@ -138,6 +138,10 @@ class RequestBundler {
             } else {
                 queue.requestPending = false;
             }
+
+            BufferType workerBufferType = readyBufferType == BufferType.Free ? BufferType.Filled : BufferType.Free;
+            if (queue.hasBuffer(workerBufferType))
+                queue.condition.notify();
         }
     }
 

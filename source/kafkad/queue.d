@@ -6,13 +6,13 @@ import kafkad.utils.lists;
 import vibe.core.sync;
 import std.bitmanip;
 import std.exception;
+import core.atomic;
 import core.memory;
 
 // Represents a single buffer of the worker queue
 struct QueueBuffer {
     ubyte* buffer, p, end;
     size_t messageSetSize;
-    Exception exception;
     long requestedOffset;
 
     QueueBuffer* next;
@@ -21,11 +21,6 @@ struct QueueBuffer {
         buffer = cast(ubyte*)enforce(GC.malloc(size, GC.BlkAttr.NO_SCAN));
         p = buffer;
         end = buffer + size;
-        exception = null;
-    }
-
-    this(Exception ex) {
-        exception = ex;
     }
 
     @property size_t filled() {
@@ -73,6 +68,7 @@ final class Queue {
         bool m_requestPending;
         RequestBundler m_bundler;
         long m_offset;
+        shared Exception m_exception;
     }
 
     // this is also updated in the fetch/push task
@@ -90,6 +86,9 @@ final class Queue {
     @property auto offset() { return m_offset; }
     @property auto offset(long v) { return m_offset = v; }
 
+    @property auto exception() { return m_exception.atomicLoad; }
+    @property void exception(Exception v) { m_exception.atomicStore(cast(shared)v); }
+
     this(IWorker worker, size_t bufferCount, size_t bufferSize) {
         import std.algorithm : max;
         m_worker = worker;
@@ -102,6 +101,7 @@ final class Queue {
         m_condition = new TaskCondition(m_mutex);
         m_requestPending = false;
         m_bundler = null;
+        m_exception = null;
     }
 
     bool hasBuffer(BufferType bufferType) {
@@ -114,11 +114,11 @@ final class Queue {
 
     QueueBuffer* waitForBuffer(BufferType bufferType) {
         List!QueueBuffer* buffers = &m_buffers[bufferType];
-        while (buffers.empty)
+        while (!m_exception && (!m_bundler || buffers.empty))
             m_condition.wait();
+        if (m_exception)
+            throw m_exception;
         QueueBuffer* buffer = buffers.popFront();
-        if (buffer.exception)
-            throw buffer.exception;
         return buffer;
     }
 

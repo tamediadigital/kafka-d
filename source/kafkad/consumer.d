@@ -40,10 +40,8 @@ class Consumer : IWorker {
 
     /// Throws an exception in the consumer task. This is used to pass the connection exceptions to the user.
     void throwException(Exception ex) {
-        synchronized (m_queue.mutex) {
-            m_queue.returnBuffer(BufferType.Filled, new QueueBuffer(ex));
-            m_queue.condition.notify();
-        }
+        m_queue.exception = ex;
+        m_queue.condition.notify();
     }
 
     @property string topic() { return m_topic; }
