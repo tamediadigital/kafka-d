@@ -1,9 +1,5 @@
 Kafka-d is a D Kafka client that depends on the vibe.d framework.
 
-
-##### Not Working:
-* Compression
-
 #### Usage
 First, bootstrap the client:
 ```D
