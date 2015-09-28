@@ -13,12 +13,25 @@ writeln("Connected!");
 ```
 
 ##### Producing
-for a full working example check ```examples/producer/src/app.d```
+For a full working example check ```examples/producer/src/app.d```
 ```D
-	Producer producer = new Producer(client, topic, partition);
-	string key = "myKey";
-	string value = "myValue";
-	producer.pushMessage(cast(ubyte[])key, cast(ubyte[])value);
+Producer producer = new Producer(client, topic, partition);
+string key = "myKey";
+string value = "myValue";
+producer.pushMessage(cast(ubyte[])key, cast(ubyte[])value);
+```
+
+To avoid double copying of data, you can fill your messages directly to the internal buffer using ```reserveMessage()``` and ```commitMessage()```. The ```pushMessage()``` function uses these two functions internally.
+```D
+Producer producer = new Producer(client, topic, partition);
+producer.reserveMessage(4, 8);
+// now the producer.reservedKey and producer.reservedValue are
+// the slices pointing to the internal buffer. They are of type ubyte[] and
+// their lengths are 4 and 8 respectively.
+producer.reservedKey[] = 0; // fill the key with zeros, it uses D slice syntax
+producer.reservedValue[] = 0xFF; // fill the value with ubyte.max
+producer.commitMessage();
+
 ```
 
 ##### Consuming
