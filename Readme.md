@@ -6,10 +6,6 @@ First, bootstrap the client:
 Configuration config;
 // adjust config's properties if necessary
 Client client = new Client([BrokerAddress("localhost", 9092)], "YOUR_CLIENT_ID", config);
-while (!client.connect()) {
-    // try indefinitely
-}
-writeln("Connected!");
 ```
 
 ##### Producing
