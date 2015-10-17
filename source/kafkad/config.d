@@ -37,7 +37,7 @@ struct Configuration {
     int producerBatchTimeout = 100;
     /// maximum number of bytes to include in the message set, this must not be larger than consumerMaxBytes,
     /// otherwise, the consumers may not handle the message sets.
-    int producerMaxBytes = 1048576;
+    int producerMaxBytes = 1048576 * 64; //64kb
     /// number of producer queue buffers, each one has size of producerMaxBytes, must be at least 2
     int producerQueueBuffers = 10;
     /// maximum time to wait (msecs) for messages
@@ -45,9 +45,9 @@ struct Configuration {
     /// minimum number of bytes to accumulate on the server before returning messages
     int consumerMinBytes = 1;
     /// maximum number of bytes to include in the message set
-    int consumerMaxBytes = 1048576;
+    int consumerMaxBytes = 1048576 * 64; //64kb
     /// number of consumer queue buffers, each one has size of consumerMaxBytes, must be at least 2
-    int consumerQueueBuffers = 10;
+    int consumerQueueBuffers = 2;
     /// number of retries to perform when refreshing the metadata, 0 = retry infinitely
     int metadataRefreshRetryCount = 3;
     /// time to wait (msecs) between retries when refreshing the metadata
