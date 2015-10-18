@@ -20,9 +20,9 @@ struct Configuration {
     /// time to wait (msecs) between retries when waiting for leader election
     int leaderElectionRetryTimeout = 1000;
     /// size of the serializer buffer
-    int serializerChunkSize = 4096;
+    int serializerChunkSize = 1024*4;
     /// size of the deserializer buffer
-    int deserializerChunkSize = 4096;
+    int deserializerChunkSize = 1024*4;
     /// maximum time (msecs) the broker should wait for the receipt of the number of acknowledgements (producerRequiredAcks)
     int produceRequestTimeout = 1000;
     /// this field indicates how many acknowledgements the servers should receive before responding to the request
@@ -37,15 +37,15 @@ struct Configuration {
     int producerBatchTimeout = 100;
     /// maximum number of bytes to include in the message set, this must not be larger than consumerMaxBytes,
     /// otherwise, the consumers may not handle the message sets.
-    int producerMaxBytes = 1048576 * 64; //64kb
+    int producerMaxBytes = 1024*1024; //1mb
     /// number of producer queue buffers, each one has size of producerMaxBytes, must be at least 2
-    int producerQueueBuffers = 10;
+    int producerQueueBuffers = 2;
     /// maximum time to wait (msecs) for messages
     int consumerMaxWaitTime = 100;
     /// minimum number of bytes to accumulate on the server before returning messages
     int consumerMinBytes = 1;
     /// maximum number of bytes to include in the message set
-    int consumerMaxBytes = 1048576 * 64; //64kb
+    int consumerMaxBytes = 1024*1024; //1mb
     /// number of consumer queue buffers, each one has size of consumerMaxBytes, must be at least 2
     int consumerQueueBuffers = 2;
     /// number of retries to perform when refreshing the metadata, 0 = retry infinitely
