@@ -50,6 +50,7 @@ class RequestBundler {
         Topic*[string] m_topics;
         TaskMutex m_mutex;
         InterruptibleTaskCondition m_readyCondition; // notified when there are queues with ready buffers
+        size_t m_queueCount;
         size_t m_requestsCollected;
     }
 
@@ -63,6 +64,7 @@ class RequestBundler {
     @property auto topics() { return m_topics; }
     @property auto mutex() { return m_mutex; }
     @property auto readyCondition() { return m_readyCondition; }
+    @property auto queueCount() { return m_queueCount; }
     @property auto requestsCollected() { return m_requestsCollected; }
 
     void clearRequestLists() {
@@ -72,6 +74,7 @@ class RequestBundler {
             cur = cur.next;
         }
         requestTopicsFront = null;
+        m_queueCount = 0;
         m_requestsCollected = 0;
     }
 
@@ -142,6 +145,7 @@ class RequestBundler {
             BufferType workerBufferType = readyBufferType == BufferType.Free ? BufferType.Filled : BufferType.Free;
             if (queue.hasBuffer(workerBufferType))
                 queue.condition.notify();
+            ++m_queueCount;
         }
     }
 
@@ -157,6 +161,7 @@ class RequestBundler {
             partition.queue.requestBundler = null;
             partition.queue.requestPending = false;
         }
+        --m_queueCount;
     }
 
     Topic* findTopic(string topic) {

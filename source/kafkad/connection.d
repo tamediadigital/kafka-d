@@ -71,12 +71,13 @@ class BrokerConnection {
             // send requests
             for (;;) {
                 synchronized (m_consumerRequestBundler.mutex) {
+                    auto minRequests = min(m_client.config.fetcherBundleMinRequests, m_consumerRequestBundler.queueCount);
                     if (!gotFirstRequest) {
                         // wait for the first fetch request
                         while (!m_consumerRequestBundler.requestTopicsFront) {
                             m_consumerRequestBundler.readyCondition.wait();
                         }
-                        if (m_consumerRequestBundler.requestsCollected < m_client.config.fetcherBundleMinRequests) {
+                        if (m_consumerRequestBundler.requestsCollected < minRequests) {
                             gotFirstRequest = true;
                             // start the timer
                             startTime = MonoTime.currTime;
@@ -85,7 +86,7 @@ class BrokerConnection {
                         }
                     } else {
                         // wait up to configured wait time or up to configured request count
-                        while (m_consumerRequestBundler.requestsCollected < m_client.config.fetcherBundleMinRequests) {
+                        while (m_consumerRequestBundler.requestsCollected < minRequests) {
                             Duration elapsedTime = MonoTime.currTime - startTime;
                             if (elapsedTime >= m_client.config.fetcherBundleMaxWaitTime.msecs)
                                 break; // timeout reached
@@ -128,12 +129,13 @@ class BrokerConnection {
             // send requests
             for (;;) {
                 synchronized (m_producerRequestBundler.mutex) {
+                    auto minRequests = min(m_client.config.pusherBundleMinRequests, m_producerRequestBundler.queueCount);
                     if (!gotFirstRequest) {
                         // wait for the first produce request
                         while (!m_producerRequestBundler.requestTopicsFront) {
                             m_producerRequestBundler.readyCondition.wait();
                         }
-                        if (m_producerRequestBundler.requestsCollected < m_client.config.pusherBundleMinRequests) {
+                        if (m_producerRequestBundler.requestsCollected < minRequests) {
                             gotFirstRequest = true;
                             // start the timer
                             startTime = MonoTime.currTime;
@@ -142,7 +144,7 @@ class BrokerConnection {
                         }
                     } else {
                         // wait up to configured wait time or up to configured request count
-                        while (m_producerRequestBundler.requestsCollected < m_client.config.pusherBundleMinRequests) {
+                        while (m_producerRequestBundler.requestsCollected < minRequests) {
                             Duration elapsedTime = MonoTime.currTime - startTime;
                             if (elapsedTime >= m_client.config.pusherBundleMaxWaitTime.msecs)
                                 break; // timeout reached
