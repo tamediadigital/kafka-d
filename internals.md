@@ -4,9 +4,10 @@
 
 ### Pipelining and bundling
 
-kafka-d supports pipelining and batching of requests through dedicated fetcher tasks assigned to each BrokerConnection. 
-When the queue of one of the consumers is not full, the task issues a fetch request in the background. 
+kafka-d supports pipelining and batching of requests through dedicated fetcher/pusher tasks assigned to each ```BrokerConnection```. 
+When the queue of one of the consumers is not full, the task issues a fetch request in the background.
 If there are multiple consumers with an empty queue, the fetcher task will combine many fetch requests.
+Likewisely when producer queue has data, the pusher task issues a produce request. These requests also may be combined into one.
 
 ### Consumer queues
 
@@ -22,7 +23,7 @@ Batch of the messages will be sent to the broker after one of these limits is ex
 
 ## How it's implemented
 
-### Queues, queue groups and others
+### Queues, request bundlers and others
 
 There are few interconnected data structures used within kafkad. 
 They are mainly used to implement all the performance features of the kafka network protocol.
@@ -35,7 +36,7 @@ Instead, the kafka designers choose to save some space which in naive approach w
 The topic partitions in the protocol are specified like a simple tree. 
 First, the topic name is sent, then list of its partitions, then the next topic name, then its partitions, etc.
 
-QueueTopic and QueuePartition classes along with QueueGroup build a dynamic structure which enables fast request bundling.
+```Topic``` and ```Partition``` classes along with ```RequestBundler``` build a dynamic structure which enables fast request bundling.
 
 ### Summary of the internal objects
 
@@ -61,11 +62,10 @@ The connection pushes received message sets to the queues.
 Likewisely, producers push prepared message sets to the their queues and connections wait for these message sets. 
 When the producer queue has buffers, the connection prepares a request and sends these message sets to the broker.
 
-* ```QueueGroup``` - groups belong to the connections. Each connection has exactly one consumer queue group and one producer queue group.
- Groups hold all consumer and producer queues. When a new consumer or producer is created, its queue is attached to the respecive queue group.
+* ```RequestBundler``` - bundlers belong to the connections. Each connection has exactly one consumer bundler and one producer bundler. Bundlers hold all consumer and producer queues. When a new consumer or producer is created, its queue is attached to the respecive request bundler.
 
-* ```GroupTopic``` and ```GroupPartition``` - they belong to the ```QueueGroup```. 
-They are used internally by the ```QueueGroup``` to organize attached consumer and producer queues in a simple tree structure of topics and child partitions. 
+* ```Topic``` and ```Partition``` - they belong to the ```RequestBundler```. 
+They are used internally by the ```RequestBundler``` to organize attached consumer and producer queues in a simple tree structure of topics and child partitions. 
 They help to quickly search for a topic/partition which is required to handle the response. 
 They are also used to build dynamic, bundled requests.
 
@@ -77,7 +77,7 @@ They are also used to build dynamic, bundled requests.
 3. ```Client```'s connection manager task, tries to establish the connection to the broker. 
 It first looks for respective leader node in the metadata.
 4. When the connection is open (either it is already opened or just connected), 
-the client attaches worker's queue to the respective queue group of the connection. 
+the client attaches worker's queue to the respective request bundler of the connection. 
 From now, the connection's fetcher task will send fetch requests as long as there are free/unfilled buffers in the consumer queues and the pusher task will send produce requests as long as there are filled buffers in the producer queues. 
 The Consumers returns processed buffers to their queues. These buffers become the free/unfilled buffers. 
 The producers push the filled buffers to their queues when they finish preparing the batch of messages (a message set).
