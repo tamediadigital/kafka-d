@@ -49,7 +49,7 @@ class RequestBundler {
     private {
         Topic*[string] m_topics;
         TaskMutex m_mutex;
-        TaskCondition m_readyCondition; // notified when there are queues with ready buffers
+        InterruptibleTaskCondition m_readyCondition; // notified when there are queues with ready buffers
         size_t m_requestsCollected;
     }
 
@@ -57,7 +57,7 @@ class RequestBundler {
 
     this() {
         m_mutex = new TaskMutex();
-        m_readyCondition = new TaskCondition(m_mutex);
+        m_readyCondition = new InterruptibleTaskCondition(cast(core.sync.mutex.Mutex)m_mutex);
     }
 
     @property auto topics() { return m_topics; }

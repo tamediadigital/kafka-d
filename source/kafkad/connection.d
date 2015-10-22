@@ -11,6 +11,7 @@ import vibe.core.net;
 import vibe.core.task;
 import vibe.core.sync;
 import vibe.core.concurrency;
+import vibe.core.log;
 import std.format;
 import core.time;
 
@@ -66,46 +67,56 @@ class BrokerConnection {
         int size, correlationId;
         bool gotFirstRequest = false;
         MonoTime startTime;
-        for (;;) {
+        try {
             // send requests
-            synchronized (m_consumerRequestBundler.mutex) {
-                if (!gotFirstRequest) {
-                    // wait for the first fetch request
-                    while (!m_consumerRequestBundler.requestTopicsFront) {
-                        m_consumerRequestBundler.readyCondition.wait();
+            for (;;) {
+                synchronized (m_consumerRequestBundler.mutex) {
+                    if (!gotFirstRequest) {
+                        // wait for the first fetch request
+                        while (!m_consumerRequestBundler.requestTopicsFront) {
+                            m_consumerRequestBundler.readyCondition.wait();
+                        }
+                        if (m_consumerRequestBundler.requestsCollected < m_client.config.fetcherBundleMinRequests) {
+                            gotFirstRequest = true;
+                            // start the timer
+                            startTime = MonoTime.currTime;
+                            // wait for more requests
+                            continue;
+                        }
+                    } else {
+                        // wait up to configured wait time or up to configured request count
+                        while (m_consumerRequestBundler.requestsCollected < m_client.config.fetcherBundleMinRequests) {
+                            Duration elapsedTime = MonoTime.currTime - startTime;
+                            if (elapsedTime >= m_client.config.fetcherBundleMaxWaitTime.msecs)
+                                break; // timeout reached
+                            Duration remaining = m_client.config.fetcherBundleMaxWaitTime.msecs - elapsedTime;
+                            if (!m_consumerRequestBundler.readyCondition.wait(remaining))
+                                break; // timeout reached
+                        }
+                        gotFirstRequest = false;
                     }
-                    if (m_consumerRequestBundler.requestsCollected < m_client.config.fetcherBundleMinRequests) {
-                        gotFirstRequest = true;
-                        // start the timer
-                        startTime = MonoTime.currTime;
-                        // wait for more requests
-                        continue;
+
+                    synchronized (m_mutex) {
+                        m_ser.fetchRequest_v0(0, m_client.clientId, m_client.config, m_consumerRequestBundler);
+                        m_ser.flush();
+
+                        // add request for each fetch
+                        auto req = m_requests.getNodeToFill();
+                        req.type = RequestType.Fetch;
+                        m_requests.pushFilledNode(req);
                     }
-                } else {
-                    // wait up to configured wait time or up to configured request count
-                    while (m_consumerRequestBundler.requestsCollected < m_client.config.fetcherBundleMinRequests) {
-                        Duration elapsedTime = MonoTime.currTime - startTime;
-                        if (elapsedTime >= m_client.config.fetcherBundleMaxWaitTime.msecs)
-                            break; // timeout reached
-                        Duration remaining = m_client.config.fetcherBundleMaxWaitTime.msecs - elapsedTime;
-                        if (!m_consumerRequestBundler.readyCondition.wait(remaining))
-                            break; // timeout reached
-                    }
-                    gotFirstRequest = false;
+
+                    m_consumerRequestBundler.clearRequestLists();
                 }
-
-                synchronized (m_mutex) {
-                    m_ser.fetchRequest_v0(0, m_client.clientId, m_client.config, m_consumerRequestBundler);
-                    m_ser.flush();
-
-                    // add request for each fetch
-                    auto req = m_requests.getNodeToFill();
-                    req.type = RequestType.Fetch;
-                    m_requests.pushFilledNode(req);
-                }
-
-                m_consumerRequestBundler.clearRequestLists();
             }
+        } catch (StreamException) {
+            // stream error, typically connection loss
+            m_pusherTask.interrupt();
+            m_receiverTask.interrupt();
+            m_client.connectionLost(this);
+        } catch (InterruptException) {
+            // do nothing
+            logDebugV("FETCHER INT");
         }
     }
 
@@ -113,47 +124,56 @@ class BrokerConnection {
         int size, correlationId;
         bool gotFirstRequest = false;
         MonoTime startTime;
-        for (;;) {
-            import vibe.core.log;
+        try {
             // send requests
-            synchronized (m_producerRequestBundler.mutex) {
-                if (!gotFirstRequest) {
-                    // wait for the first produce request
-                    while (!m_producerRequestBundler.requestTopicsFront) {
-                        m_producerRequestBundler.readyCondition.wait();
+            for (;;) {
+                synchronized (m_producerRequestBundler.mutex) {
+                    if (!gotFirstRequest) {
+                        // wait for the first produce request
+                        while (!m_producerRequestBundler.requestTopicsFront) {
+                            m_producerRequestBundler.readyCondition.wait();
+                        }
+                        if (m_producerRequestBundler.requestsCollected < m_client.config.pusherBundleMinRequests) {
+                            gotFirstRequest = true;
+                            // start the timer
+                            startTime = MonoTime.currTime;
+                            // wait for more requests
+                            continue;
+                        }
+                    } else {
+                        // wait up to configured wait time or up to configured request count
+                        while (m_producerRequestBundler.requestsCollected < m_client.config.pusherBundleMinRequests) {
+                            Duration elapsedTime = MonoTime.currTime - startTime;
+                            if (elapsedTime >= m_client.config.pusherBundleMaxWaitTime.msecs)
+                                break; // timeout reached
+                            Duration remaining = m_client.config.pusherBundleMaxWaitTime.msecs - elapsedTime;
+                            if (!m_producerRequestBundler.readyCondition.wait(remaining))
+                                break; // timeout reached
+                        }
+                        gotFirstRequest = false;
                     }
-                    if (m_producerRequestBundler.requestsCollected < m_client.config.pusherBundleMinRequests) {
-                        gotFirstRequest = true;
-                        // start the timer
-                        startTime = MonoTime.currTime;
-                        // wait for more requests
-                        continue;
+
+                    synchronized (m_mutex) {
+                        m_ser.produceRequest_v0(0, m_client.clientId, m_client.config, m_producerRequestBundler);
+                        m_ser.flush();
+                        
+                        // add request for each fetch
+                        auto req = m_requests.getNodeToFill();
+                        req.type = RequestType.Produce;
+                        m_requests.pushFilledNode(req);
                     }
-                } else {
-                    // wait up to configured wait time or up to configured request count
-                    while (m_producerRequestBundler.requestsCollected < m_client.config.pusherBundleMinRequests) {
-                        Duration elapsedTime = MonoTime.currTime - startTime;
-                        if (elapsedTime >= m_client.config.pusherBundleMaxWaitTime.msecs)
-                            break; // timeout reached
-                        Duration remaining = m_client.config.pusherBundleMaxWaitTime.msecs - elapsedTime;
-                        if (!m_producerRequestBundler.readyCondition.wait(remaining))
-                            break; // timeout reached
-                    }
-                    gotFirstRequest = false;
+
+                    m_producerRequestBundler.clearRequestLists();
                 }
-                
-                synchronized (m_mutex) {
-                    m_ser.produceRequest_v0(0, m_client.clientId, m_client.config, m_producerRequestBundler);
-                    m_ser.flush();
-                    
-                    // add request for each fetch
-                    auto req = m_requests.getNodeToFill();
-                    req.type = RequestType.Produce;
-                    m_requests.pushFilledNode(req);
-                }
-                
-                m_producerRequestBundler.clearRequestLists();
             }
+        } catch (StreamException) {
+            // stream error, typically connection loss
+            m_fetcherTask.interrupt();
+            m_receiverTask.interrupt();
+            m_client.connectionLost(this);
+        } catch (InterruptException) {
+            // do nothing
+            logDebugV("PUSHER INT");
         }
     }
 
@@ -367,9 +387,14 @@ class BrokerConnection {
                 }
             }
         }
-        catch (StreamException ex) {
+        catch (StreamException) {
             // stream error, typically connection loss
+            m_fetcherTask.interrupt();
+            m_pusherTask.interrupt();
             m_client.connectionLost(this);
+        } catch (InterruptException) {
+            // do nothing
+            logDebugV("RECEIVER INT");
         }
     }
 

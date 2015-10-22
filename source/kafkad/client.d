@@ -97,7 +97,7 @@ class Client {
                         auto conn = getConn(brokerAddr);
                         auto host = conn.addr;
                         m_metadata = conn.getMetadata([]);
-                        enforce(m_metadata.brokers.length, "Empty metadata, this may indicate there are no defined topics in the cluster");
+                        enforce(m_metadata.brokers.length, new ConnectionException("Empty metadata, this may indicate there are no defined topics in the cluster"));
                         m_hostCache = null; // clear the cache
 
                         int bootstrapBrokerId = -1;
@@ -315,6 +315,7 @@ package: // functions below are used by the consumer and producer classes
                     q.requestPending = false;
                 }
             }
+            m_brokerlessWorkersEmpty.notify();
         }
     }
 }
