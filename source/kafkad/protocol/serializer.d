@@ -32,7 +32,6 @@ struct Serializer {
     }
 
     void check(size_t needed) {
-        pragma(inline, true);
         if (end - p < needed)
             flush();
     }
