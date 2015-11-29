@@ -252,7 +252,6 @@ class BrokerConnection {
 
                                     Queue queue = queuePartition.queue;
 
-                                    // TODO: handle errorCode
                                     switch (cast(ApiError)fpi.errorCode) {
                                         case ApiError.NoError: break;
                                         case ApiError.UnknownTopicOrPartition:
@@ -263,6 +262,7 @@ class BrokerConnection {
                                             // connection and add it to the client brokerlessConsumers list.
                                             // The client will do the rest.
                                             m_consumerRequestBundler.removeQueue(queueTopic, queuePartition);
+                                            m_client.addToBrokerless(queue, true);
                                             m_des.skipBytes(fpi.messageSetSize);
                                             continue;
                                         case ApiError.OffsetOutOfRange:
@@ -355,8 +355,9 @@ class BrokerConnection {
                                         // skip the partition
                                         continue;
                                     }
-                                    
-                                    // TODO: handle errorCode
+
+                                    Queue queue = queuePartition.queue;
+
                                     switch (cast(ApiError)ppi.errorCode) {
                                         case ApiError.NoError: break;
                                         case ApiError.UnknownTopicOrPartition:
@@ -367,11 +368,10 @@ class BrokerConnection {
                                             // connection and add it to the client brokerlessWorkers list.
                                             // The client will do the rest.
                                             m_producerRequestBundler.removeQueue(queueTopic, queuePartition);
+                                            m_client.addToBrokerless(queue, true);
                                             continue;
                                         default: throw new ProtocolException(format("Unexpected produce response error: %d", ppi.errorCode));
                                     }
-
-                                    Queue queue = queuePartition.queue;
 
                                     synchronized (queue.mutex) {
                                         //queue.returnBuffer(BufferType.Filled);

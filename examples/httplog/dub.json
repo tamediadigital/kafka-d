@@ -1,0 +1,10 @@
+{
+    "name": "httplog",
+    "description": "Kafka and vibe.d logging example",
+    "authors": [ "Piotr Szturmaj" ],
+    "dependencies": {
+        "kafka-d": {"version": "~master", "path": "../../"},
+        "vibe-d": "~>0.7.25"
+    },
+    "versions": ["VibeDefaultMain"]
+}

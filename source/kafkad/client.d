@@ -293,6 +293,12 @@ package: // functions below are used by the consumer and producer classes
         }
     }
 
+    void addToBrokerless(Queue queue, bool notify = false) {
+        m_brokerlessWorkers.insertBack(queue.worker);
+        if (notify)
+            m_brokerlessWorkersEmpty.notify();
+    }
+
     void connectionLost(BrokerConnection conn) {
         synchronized (m_mutex, conn.consumerRequestBundler.mutex, conn.producerRequestBundler.mutex) {
             foreach (pair; m_conns.byKeyValue) {
@@ -302,14 +308,14 @@ package: // functions below are used by the consumer and producer classes
                 }
             }
             foreach (q; &conn.consumerRequestBundler.queues) {
-                m_brokerlessWorkers.insertBack(q.worker);
+                addToBrokerless(q);
                 synchronized (q.mutex) {
                     q.requestBundler = null;
                     q.requestPending = false;
                 }
             }
             foreach (q; &conn.producerRequestBundler.queues) {
-                m_brokerlessWorkers.insertBack(q.worker);
+                addToBrokerless(q);
                 synchronized (q.mutex) {
                     q.requestBundler = null;
                     q.requestPending = false;

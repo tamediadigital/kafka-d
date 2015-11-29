@@ -265,7 +265,7 @@ class Producer : IWorker {
     /// Params:
     ///     key = the message key, may be null
     ///     value = the message value, may be null
-    void pushMessage(ubyte[] key, ubyte[] value) {
+    void pushMessage(const(ubyte)[] key, const(ubyte)[] value) {
         int keySize = key == null ? -1 : cast(int)key.length;
         int valueSize = value == null ? -1 : cast(int)value.length;
         import vibe.core.log;
