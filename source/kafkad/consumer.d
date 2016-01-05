@@ -32,6 +32,7 @@ class Consumer : IWorker {
         QueueBuffer* m_currentBuffer, m_compressionBuffer;
         bool m_isDecompressedBuffer;
         z_stream m_zlibContext;
+        Message m_message;
     }
 
     package (kafkad) {
@@ -76,7 +77,35 @@ class Consumer : IWorker {
         swap(m_currentBuffer, m_compressionBuffer);
         m_isDecompressedBuffer = isDecompressedBuffer;
     }
+    
+    Message front()
+    {
+        return m_message;
+    }
+    
+    void popFront()
+    {
+        m_message = getMessage();
+    }
+    
+    bool empty()
+    { 
+        return false;
+    }
 
+    int opApply(int delegate( Message) dg)
+    {
+       int result;
+       for(;;)
+       {
+         popFront();
+         if (dg(front())) 
+            return result;         
+       }
+       assert(0);
+    }
+    
+    // TODO: make private
     Message getMessage() {
         if (!m_currentBuffer) {
             synchronized (m_queue.mutex) {
