@@ -1,5 +1,5 @@
 import std.stdio;
-import vibe.d;
+import vibe.vibe;
 import kafkad.client;
 
 shared static this()

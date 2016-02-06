@@ -1,5 +1,5 @@
 ﻿import std.stdio;
-import vibe.d;
+import vibe.vibe;
 import kafkad.client;
 
 void main() {
@@ -17,7 +17,7 @@ void main() {
                 runWorkerTask((Client client, string topic, int partition) {
                     Consumer consumer = new Consumer(client, topic, partition, Offsets.Earliest);
                     for (;;) {
-                        Message msg = consumer.getMessage();
+                        auto msg = consumer.getMessage();
                         
                         // if the payload consists of UTF-8 characters then it may be safely cast to a string
                         string keyStr = msg.key ? cast(string)msg.key : ""; // msg.key may be null

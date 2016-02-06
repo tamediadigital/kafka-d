@@ -10,10 +10,10 @@ import vibe.core.core;
 import vibe.core.net;
 import vibe.core.task;
 import vibe.core.sync;
-import vibe.core.concurrency;
 import vibe.core.log;
 import std.format;
 import core.time;
+import std.concurrency;
 
 package:
 
@@ -203,11 +203,11 @@ class BrokerConnection {
                 switch (req.type) {
                     case RequestType.Metadata:
                         Metadata metadata = m_des.metadataResponse_v0();
-                        send(req.tid, cast(shared)metadata);
+                        send(req.tid, cast(immutable)metadata);
                         break;
                     case RequestType.Offset:
                         OffsetResponse_v0 resp = m_des.offsetResponse_v0();
-                        send(req.tid, cast(shared)resp);
+                        send(req.tid, cast(immutable)resp);
                         break;
                     case RequestType.Fetch:
                         // parse the fetch response, move returned messages to the correct queues,
@@ -411,7 +411,7 @@ class BrokerConnection {
             m_requests.pushFilledNode(req);
         }
         Metadata ret;
-        receive((shared Metadata v) { ret = cast()v; });
+        receive((immutable Metadata v) { ret = cast()v; });
         return ret;
     }
 
@@ -436,14 +436,17 @@ class BrokerConnection {
             req.tid = thisTid;
             m_requests.pushFilledNode(req);
         }
-        shared OffsetResponse_v0 resp;
-        receive((shared OffsetResponse_v0 v) { resp = v; });
-        enforce(resp.topics.length == 1);
-        enforce(resp.topics[0].partitions.length == 1);
-        import std.format;
-        enforce(resp.topics[0].partitions[0].errorCode == 0,
-            format("Could not get starting offset for topic %s and partition %d", topic, partition));
-        enforce(resp.topics[0].partitions[0].offsets.length == 1);
-        return resp.topics[0].partitions[0].offsets[0];
+        long return_offset;
+        receive(
+            (immutable OffsetResponse_v0 resp) { 
+                enforce(resp.topics.length == 1);
+                enforce(resp.topics[0].partitions.length == 1);
+                import std.format;
+                enforce(resp.topics[0].partitions[0].errorCode == 0,format("Could not get starting offset for topic %s and partition %d", topic, partition));
+                enforce(resp.topics[0].partitions[0].offsets.length == 1);
+                return_offset = resp.topics[0].partitions[0].offsets[0];
+             });
+
+        return return_offset;
     }
 }
