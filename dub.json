@@ -2,7 +2,8 @@
     "name": "kafka-d",
     "description": "Native driver for Apache Kafka",
     "copyright": "Copyright © 2015 Tamedia AG",
-    "authors": ["Piotr Szturmaj"],
+    "authors": ["Piotr Szturmaj", "Yannick Koechlin"],
+    "licence": "MIT",
     "dependencies": {
         "vibe-d": "~>0.7.27"
     },
