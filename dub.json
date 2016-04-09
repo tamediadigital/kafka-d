@@ -3,7 +3,7 @@
     "description": "Native driver for Apache Kafka",
     "copyright": "Copyright © 2015 Tamedia AG",
     "authors": ["Piotr Szturmaj", "Yannick Koechlin"],
-    "licence": "MIT",
+    "license" : "MIT",
     "dependencies": {
         "vibe-d": "~>0.7.27"
     },
