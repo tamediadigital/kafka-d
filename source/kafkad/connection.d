@@ -267,7 +267,8 @@ class BrokerConnection {
                                             continue;
                                         case ApiError.OffsetOutOfRange:
                                             m_consumerRequestBundler.removeQueue(queueTopic, queuePartition);
-                                            queue.worker.throwException(new Exception(format(
+                                            m_client.removeConsumer(cast(Consumer)queue.worker);
+                                            queue.worker.throwException(new OffsetOutOfRangeException(format(
                                                         "Offset %d is out of range for topic %s, partition %d",
                                                         queue.offset, queueTopic.topic, queuePartition.partition)));
                                             m_des.skipBytes(fpi.messageSetSize);

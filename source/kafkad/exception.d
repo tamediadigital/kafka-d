@@ -21,6 +21,12 @@ class StreamException : Exception {
     mixin ExceptionCtorMixin;
 }
 
+// kafka specific Exceptions:
+
+class OffsetOutOfRangeException : Exception {
+    mixin ExceptionCtorMixin;
+}
+
 class MetadataException : Exception {
     mixin ExceptionCtorMixin;
 }
