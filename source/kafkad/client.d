@@ -259,8 +259,10 @@ class Client {
                     conn.producerRequestBundler.addQueue(producer.queue, BufferType.Filled);
                 }
             } catch (ConnectionException) {
-                // couldn't connect to the leader
-                worker.throwException(new Exception("Couldn't connect to the leader broker"));
+                // couldn't connect to the leader, readd this worker to brokerless workers to try again
+                synchronized (m_mutex) {
+                    m_brokerlessWorkers.insertBack(worker);
+                }
             }
         }
     }
