@@ -1,5 +1,6 @@
 ﻿module kafkad.bundler;
 
+import core.sync.mutex;
 import kafkad.queue;
 import vibe.core.sync;
 
