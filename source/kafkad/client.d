@@ -2,7 +2,6 @@
 
 import kafkad.connection;
 import kafkad.protocol;
-import kafkad.exception;
 import kafkad.worker;
 import kafkad.queue;
 import core.time;
@@ -14,6 +13,7 @@ import vibe.core.log;
 public import kafkad.config;
 public import kafkad.consumer;
 public import kafkad.producer;
+public import kafkad.exception;
 
 struct BrokerAddress {
     string host;
@@ -259,8 +259,10 @@ class Client {
                     conn.producerRequestBundler.addQueue(producer.queue, BufferType.Filled);
                 }
             } catch (ConnectionException) {
-                // couldn't connect to the leader
-                worker.throwException(new Exception("Couldn't connect to the leader broker"));
+                // couldn't connect to the leader, readd this worker to brokerless workers to try again
+                synchronized (m_mutex) {
+                    m_brokerlessWorkers.insertBack(worker);
+                }
             }
         }
     }
@@ -281,6 +283,13 @@ package: // functions below are used by the consumer and producer classes
             m_workers.insertBack(consumer);
             m_brokerlessWorkers.insertBack(consumer);
             m_brokerlessWorkersEmpty.notify();
+        }
+    }
+
+    void removeConsumer(Consumer consumer) {
+        import std.algorithm;
+        synchronized (m_mutex) {
+            m_workers.remove(find(m_workers[], consumer));
         }
     }
 

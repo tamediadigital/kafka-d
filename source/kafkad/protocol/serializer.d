@@ -1,5 +1,6 @@
 ﻿module kafkad.protocol.serializer;
 
+import core.stdc.string;
 import kafkad.protocol.common;
 import kafkad.config;
 import kafkad.exception;

@@ -1,5 +1,6 @@
 ﻿module kafkad.protocol.deserializer;
 
+import core.stdc.string;
 import kafkad.protocol.common;
 import kafkad.protocol.metadata;
 import kafkad.exception;
