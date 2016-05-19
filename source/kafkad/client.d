@@ -111,7 +111,13 @@ class Client {
                             m_hostCache[b.id] = bhost;
                         }
 
-                        enforce(bootstrapBrokerId >= 0);
+                        if(bootstrapBrokerId < 0)
+                        {
+                            import std.range : takeOne;
+                            bootstrapBrokerId = m_metadata.brokers.takeOne.front.id;
+                            logWarn("Your Bootstrap Broker is not in the advertised brokers! using broker %s from available Brokers: %s", bootstrapBrokerId, m_metadata.brokers);
+                        }
+
                         conn.id = bootstrapBrokerId;
 
                         debug {
