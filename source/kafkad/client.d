@@ -113,7 +113,7 @@ class Client {
 
                         if(bootstrapBrokerId < 0)
                         {
-                            import std.range : takeOne;
+                            import std.range : takeOne, front;
                             bootstrapBrokerId = m_metadata.brokers.takeOne.front.id;
                             logWarn("Your Bootstrap Broker is not in the advertised brokers! using broker %s from available Brokers: %s", bootstrapBrokerId, m_metadata.brokers);
                         }
