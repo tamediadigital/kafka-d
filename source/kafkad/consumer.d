@@ -71,42 +71,35 @@ class Consumer : IWorker {
             inflateEnd(&m_zlibContext);
 
         client.addNewConsumer(this);
+        popFront(); // seed message
     }
 
     private void swapBuffers(bool isDecompressedBuffer) {
         swap(m_currentBuffer, m_compressionBuffer);
         m_isDecompressedBuffer = isDecompressedBuffer;
     }
-    
+
     Message front()
     {
         return m_message;
     }
-    
+
     void popFront()
     {
-        m_message = getMessage();
-    }
-    
-    bool empty()
-    { 
-        return false;
+        m_message = fetchMessage();
     }
 
-    int opApply(int delegate( Message) dg)
-    {
-       int result;
-       for(;;)
-       {
-         popFront();
-         if (dg(front())) 
-            return result;         
-       }
-       assert(0);
-    }
-    
+    enum empty = false;
+
     // TODO: make private
     Message getMessage() {
+        auto m = front;
+        popFront;
+        return m;
+    }
+
+private:
+    Message fetchMessage() {
         if (!m_currentBuffer) {
             synchronized (m_queue.mutex) {
                 m_currentBuffer = m_queue.waitForBuffer(BufferType.Filled);
