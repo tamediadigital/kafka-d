@@ -1,5 +1,7 @@
 Kafka-d is a D Kafka client that depends on the vibe.d framework.
 
+[![Build Status](https://travis-ci.org/tamediadigital/kafka-d.svg?branch=master)](https://travis-ci.org/tamediadigital/kafka-d)
+
 #### Usage
 First, bootstrap the client:
 ```D
