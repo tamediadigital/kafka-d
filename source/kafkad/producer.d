@@ -8,11 +8,12 @@ import kafkad.utils.snappy;
 import etc.c.zlib;
 import std.exception;
 import core.time;
-import vibe.core.core;
 
 class Producer : IWorker {
     enum __isWeakIsolatedType = true; // needed to pass this type between vibe.d's tasks
     private {
+        import vibe.core.sync : TaskCondition;
+
         Client m_client;
         string m_topic;
         int m_partition;
@@ -59,6 +60,8 @@ class Producer : IWorker {
     ///                        1 and 9: 1 gives best speed, 9 gives best compression, it uses
     ///                        config.producerCompressionLevel by default
     this(Client client, string topic, int partition, Compression compression, int compressionLevel) {
+        import vibe.core.core : runTask;
+
         m_client = client;
         m_topic = topic;
         m_partition = partition;
@@ -157,7 +160,7 @@ class Producer : IWorker {
                 setupMessageHeaders(m_compressionBuffer, messageSize, -1, compressedLen, m_compression);
                 swap(m_currentBuffer, m_compressionBuffer);
             }
-            
+
             switch (m_compression) {
                 case Compression.GZIP:
                     m_zlibContext.next_in = m_currentBuffer.buffer;

@@ -12,12 +12,14 @@ import kafkad.queue;
 
 struct Serializer {
     private {
+        import vibe.core.stream : OutputStreamProxy;
+
         ubyte* chunk, p, end;
-        Stream stream;
+        OutputStreamProxy stream;
         size_t chunkSize;
     }
 
-    this(Stream stream, size_t chunkSize) {
+    this(Stream)(Stream stream, size_t chunkSize) {
         chunk = cast(ubyte*)enforce(GC.malloc(chunkSize, GC.BlkAttr.NO_SCAN));
         p = chunk;
         end = chunk + chunkSize;

@@ -50,6 +50,8 @@ class BrokerConnection {
     @property RequestBundler producerRequestBundler() { return m_producerRequestBundler; }
 
     this(Client client, TCPConnection conn) {
+        import vibe.core.stream : OutputStreamProxy;
+
         m_client = client;
         m_conn = conn;
         m_ser = Serializer(conn, client.config.serializerChunkSize);
@@ -158,7 +160,7 @@ class BrokerConnection {
                     synchronized (m_mutex) {
                         m_ser.produceRequest_v0(0, m_client.clientId, m_client.config, m_producerRequestBundler);
                         m_ser.flush();
-                        
+
                         // add request for each fetch
                         auto req = m_requests.getNodeToFill();
                         req.type = RequestType.Produce;
@@ -328,13 +330,13 @@ class BrokerConnection {
                             int numpartitions;
                             short topicNameLen;
                             m_des.deserialize(topicNameLen);
-                            
+
                             ubyte[] topicSlice = m_topicNameBuffer[0 .. topicNameLen];
                             m_des.deserializeSlice(topicSlice);
                             topic = cast(string)topicSlice;
                             m_des.deserialize(numpartitions);
                             assert(numpartitions > 0);
-                            
+
                             synchronized (m_producerRequestBundler.mutex) {
                                 Topic* queueTopic = m_producerRequestBundler.findTopic(topic);
 
@@ -346,7 +348,7 @@ class BrokerConnection {
                                     }
                                     ProducePartitionInfo ppi;
                                     m_des.deserialize(ppi);
-                                    
+
                                     Partition* queuePartition = null;
                                     if (queueTopic)
                                         queuePartition = queueTopic.findPartition(ppi.partition);
@@ -439,7 +441,7 @@ class BrokerConnection {
         }
         long return_offset;
         receive(
-            (immutable OffsetResponse_v0 resp) { 
+            (immutable OffsetResponse_v0 resp) {
                 enforce(resp.topics.length == 1);
                 enforce(resp.topics[0].partitions.length == 1);
                 import std.format;

@@ -8,8 +8,6 @@ import core.time;
 import std.container.dlist;
 import std.exception;
 import std.conv;
-import vibe.core.core;
-import vibe.core.log;
 public import kafkad.config;
 public import kafkad.consumer;
 public import kafkad.producer;
@@ -24,7 +22,7 @@ struct BrokerAddress {
         this.host = host;
         this.port = port;
     }
-    
+
     this(string address)
     {
         import std.algorithm : splitter;
@@ -36,8 +34,8 @@ struct BrokerAddress {
     }
 }
 
-unittest 
-{   
+unittest
+{
     string hostname = "127.0.0.1";
     ushort port = 9292;
     auto address = hostname ~ ":" ~ port.to!string;
@@ -52,6 +50,10 @@ unittest
 class Client {
     enum __isWeakIsolatedType = true; // needed to pass this type between vibe.d's tasks
     private {
+        import vibe.core.net : NetworkAddress;
+        import vibe.core.sync : TaskCondition, TaskMutex;
+        import vibe.core.task : Task;
+
         Configuration m_config;
         BrokerAddress[] m_bootstrapBrokers;
         string m_clientId;
@@ -75,6 +77,8 @@ class Client {
     this(BrokerAddress[] bootstrapBrokers, string clientId = format("kafka-d-%d",thisProcessID),
         Configuration config = Configuration())
     {
+        import vibe.core.core : runTask;
+
         m_config = config;
         enforce(bootstrapBrokers.length);
         m_bootstrapBrokers = bootstrapBrokers;
@@ -88,6 +92,9 @@ class Client {
     /// Refreshes the metadata and stores it in the cache. Call it before using the getTopics/getPartitions to get the most recent metadata.
     /// Metadata is also refreshed internally on the first use and on each consumer/producer failure.
     void refreshMetadata() {
+        import vibe.core.core : sleep;
+        import vibe.core.log : logDebug, logWarn;
+
         synchronized (m_mutex) {
             Exception lastException = null;
             auto remainingRetries = m_config.metadataRefreshRetryCount;
@@ -151,8 +158,10 @@ class Client {
     }
 
     private NetworkAddress resolveBrokerAddr(BrokerAddress brokerAddr) {
+        import vibe.core.net : resolveHost;
+
         auto netAddr = resolveHost(brokerAddr.host).rethrow!ConnectionException("Could not resolve host " ~ brokerAddr.host);
-        netAddr.port = brokerAddr.port; 
+        netAddr.port = brokerAddr.port;
         return netAddr;
     }
 
@@ -162,6 +171,8 @@ class Client {
     }
 
     private BrokerConnection getConn(NetworkAddress netAddr) {
+        import vibe.core.net : connectTCP;
+
         auto pconn = netAddr in m_conns;
         if (!pconn) {
             auto tcpConn = connectTCP(netAddr).rethrow!ConnectionException("TCP connect to address " ~ netAddr.toString() ~ " failed");
@@ -210,6 +221,8 @@ class Client {
     // again in a short time, so that the consumer doesn't need to wait for the messages at all. For the consumer,
     // it would be completely transparent.
     private void connectionManagerMain() {
+        import vibe.core.core : sleep;
+
     mainLoop:
         for (;;) {
             IWorker worker;
@@ -280,7 +293,7 @@ class Client {
                         name, w.topic, w.partition));
         }
     }
-    
+
 package: // functions below are used by the consumer and producer classes
 
     void addNewConsumer(Consumer consumer) {
@@ -315,28 +328,32 @@ package: // functions below are used by the consumer and producer classes
     }
 
     void connectionLost(BrokerConnection conn) {
-        synchronized (m_mutex, conn.consumerRequestBundler.mutex, conn.producerRequestBundler.mutex) {
-            foreach (pair; m_conns.byKeyValue) {
-                if (pair.value == conn) {
-                    m_conns.remove(pair.key);
-                    break;
+        synchronized (m_mutex) {
+            synchronized (conn.consumerRequestBundler.mutex) {
+                synchronized (conn.producerRequestBundler.mutex) {
+                    foreach (pair; m_conns.byKeyValue) {
+                        if (pair.value == conn) {
+                            m_conns.remove(pair.key);
+                            break;
+                        }
+                    }
+                    foreach (q; &conn.consumerRequestBundler.queues) {
+                        addToBrokerless(q);
+                        synchronized (q.mutex) {
+                            q.requestBundler = null;
+                            q.requestPending = false;
+                        }
+                    }
+                    foreach (q; &conn.producerRequestBundler.queues) {
+                        addToBrokerless(q);
+                        synchronized (q.mutex) {
+                            q.requestBundler = null;
+                            q.requestPending = false;
+                        }
+                    }
+                    m_brokerlessWorkersEmpty.notify();
                 }
             }
-            foreach (q; &conn.consumerRequestBundler.queues) {
-                addToBrokerless(q);
-                synchronized (q.mutex) {
-                    q.requestBundler = null;
-                    q.requestPending = false;
-                }
-            }
-            foreach (q; &conn.producerRequestBundler.queues) {
-                addToBrokerless(q);
-                synchronized (q.mutex) {
-                    q.requestBundler = null;
-                    q.requestPending = false;
-                }
-            }
-            m_brokerlessWorkersEmpty.notify();
         }
     }
 }

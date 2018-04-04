@@ -9,13 +9,15 @@ import kafkad.exception;
 
 struct Deserializer {
     private {
+        import vibe.core.stream : InputStreamProxy;
+
         ubyte* chunk, p, end;
-        Stream stream;
+        InputStreamProxy stream;
         size_t remaining; // bytes remaining in current message
         size_t chunkSize;
     }
-    
-    this(Stream stream, size_t chunkSize) {
+
+    this(Stream)(Stream stream, size_t chunkSize) {
         chunk = cast(ubyte*)enforce(GC.malloc(chunkSize, GC.BlkAttr.NO_SCAN));
         p = chunk;
         end = chunk;
@@ -90,7 +92,7 @@ struct Deserializer {
         check(1);
         s = *p++;
     }
-    
+
     void deserialize(T)(out T s)
         if (is(T == short) || is(T == int) || is(T == long))
     {
