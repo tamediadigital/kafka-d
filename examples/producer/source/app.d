@@ -10,8 +10,10 @@ void main() {
         // adjust config's properties if necessary
         
         Client client = new Client([BrokerAddress("127.0.0.1", 9092)], "kafka-d", config);
+		writeln("After client create");
         
         foreach (topic; client.getTopics()) {
+			writefln("Topic %s", topic);
             foreach (partition; client.getPartitions(topic)) {
                 writefln("Producing for topic %s and partition %d", topic, partition);
                 runWorkerTask((Client client, string topic, int partition) {

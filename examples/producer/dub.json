@@ -5,5 +5,5 @@
     "dependencies": {
         "kafka-d": {"version": "~master", "path": "../../"}
     },
-    "versions": ["VibeCustomMain"]
+	"dflags" : ["-version=VibeUseOpenSSL11"]
 }
