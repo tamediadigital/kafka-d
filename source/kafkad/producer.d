@@ -9,6 +9,7 @@ import etc.c.zlib;
 import std.exception;
 import core.time;
 import vibe.core.core;
+import vibe.core.sync;
 
 class Producer : IWorker {
     enum __isWeakIsolatedType = true; // needed to pass this type between vibe.d's tasks

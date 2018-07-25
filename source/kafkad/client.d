@@ -10,6 +10,8 @@ import std.exception;
 import std.conv;
 import vibe.core.core;
 import vibe.core.log;
+import vibe.core.net : NetworkAddress;
+import vibe.core.sync : TaskMutex, TaskCondition;
 public import kafkad.config;
 public import kafkad.consumer;
 public import kafkad.producer;
@@ -151,6 +153,7 @@ class Client {
     }
 
     private NetworkAddress resolveBrokerAddr(BrokerAddress brokerAddr) {
+		import vibe.core.net : resolveHost;
         auto netAddr = resolveHost(brokerAddr.host).rethrow!ConnectionException("Could not resolve host " ~ brokerAddr.host);
         netAddr.port = brokerAddr.port; 
         return netAddr;
@@ -162,6 +165,7 @@ class Client {
     }
 
     private BrokerConnection getConn(NetworkAddress netAddr) {
+		import vibe.core.net : connectTCP;
         auto pconn = netAddr in m_conns;
         if (!pconn) {
             auto tcpConn = connectTCP(netAddr).rethrow!ConnectionException("TCP connect to address " ~ netAddr.toString() ~ " failed");
@@ -315,28 +319,32 @@ package: // functions below are used by the consumer and producer classes
     }
 
     void connectionLost(BrokerConnection conn) {
-        synchronized (m_mutex, conn.consumerRequestBundler.mutex, conn.producerRequestBundler.mutex) {
-            foreach (pair; m_conns.byKeyValue) {
-                if (pair.value == conn) {
-                    m_conns.remove(pair.key);
-                    break;
-                }
-            }
-            foreach (q; &conn.consumerRequestBundler.queues) {
-                addToBrokerless(q);
-                synchronized (q.mutex) {
-                    q.requestBundler = null;
-                    q.requestPending = false;
-                }
-            }
-            foreach (q; &conn.producerRequestBundler.queues) {
-                addToBrokerless(q);
-                synchronized (q.mutex) {
-                    q.requestBundler = null;
-                    q.requestPending = false;
-                }
-            }
-            m_brokerlessWorkersEmpty.notify();
-        }
-    }
+        synchronized (m_mutex) {
+			synchronized(conn.consumerRequestBundler.mutex) {
+				synchronized(conn.producerRequestBundler.mutex) {
+            		foreach (pair; m_conns.byKeyValue) {
+            		    if (pair.value == conn) {
+            		        m_conns.remove(pair.key);
+            		        break;
+            		    }
+            		}
+            		foreach (q; &conn.consumerRequestBundler.queues) {
+            		    addToBrokerless(q);
+            		    synchronized (q.mutex) {
+            		        q.requestBundler = null;
+            		        q.requestPending = false;
+            		    }
+            		}
+            		foreach (q; &conn.producerRequestBundler.queues) {
+            		    addToBrokerless(q);
+            		    synchronized (q.mutex) {
+            		        q.requestBundler = null;
+            		        q.requestPending = false;
+            		    }
+            		}
+            		m_brokerlessWorkersEmpty.notify();
+				}
+        	}
+    	}
+	}
 }
