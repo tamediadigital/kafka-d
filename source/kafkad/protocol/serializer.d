@@ -1,6 +1,7 @@
 ﻿module kafkad.protocol.serializer;
 
 import core.stdc.string;
+import vibe.core.net;
 import kafkad.protocol.common;
 import kafkad.config;
 import kafkad.exception;
@@ -13,11 +14,11 @@ import kafkad.queue;
 struct Serializer {
     private {
         ubyte* chunk, p, end;
-        Stream stream;
+        TCPConnection stream;
         size_t chunkSize;
     }
 
-    this(Stream stream, size_t chunkSize) {
+    this(TCPConnection stream, size_t chunkSize) {
         chunk = cast(ubyte*)enforce(GC.malloc(chunkSize, GC.BlkAttr.NO_SCAN));
         p = chunk;
         end = chunk + chunkSize;

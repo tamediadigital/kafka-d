@@ -130,23 +130,25 @@ class RequestBundler {
     }
 
     void addQueue(Queue queue, BufferType readyBufferType) {
-        synchronized (m_mutex, queue.mutex) {
-            auto ptopic = getOrCreateTopic(queue.worker.topic);
-            auto ppartition = new Partition(queue.worker.partition, queue);
-            ptopic.partitions[queue.worker.partition] = ppartition;
+        synchronized (m_mutex) {
+			synchronized(queue.mutex) {
+            	auto ptopic = getOrCreateTopic(queue.worker.topic);
+            	auto ppartition = new Partition(queue.worker.partition, queue);
+            	ptopic.partitions[queue.worker.partition] = ppartition;
 
-            queue.requestBundler = this;
-            if (queue.hasBuffer(readyBufferType)) {
-                queueHasReadyBuffers(ptopic, ppartition);
-                queue.requestPending = true;
-            } else {
-                queue.requestPending = false;
-            }
+            	queue.requestBundler = this;
+            	if (queue.hasBuffer(readyBufferType)) {
+            	    queueHasReadyBuffers(ptopic, ppartition);
+            	    queue.requestPending = true;
+            	} else {
+            	    queue.requestPending = false;
+            	}
 
-            BufferType workerBufferType = readyBufferType == BufferType.Free ? BufferType.Filled : BufferType.Free;
-            if (queue.hasBuffer(workerBufferType))
-                queue.condition.notify();
-            ++m_queueCount;
+            	BufferType workerBufferType = readyBufferType == BufferType.Free ? BufferType.Filled : BufferType.Free;
+            	if (queue.hasBuffer(workerBufferType))
+            	    queue.condition.notify();
+            	++m_queueCount;
+			}
         }
     }
 

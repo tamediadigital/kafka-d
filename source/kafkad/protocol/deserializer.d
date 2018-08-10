@@ -1,6 +1,7 @@
 ﻿module kafkad.protocol.deserializer;
 
 import core.stdc.string;
+import vibe.core.net;
 import kafkad.protocol.common;
 import kafkad.protocol.metadata;
 import kafkad.exception;
@@ -10,12 +11,12 @@ import kafkad.exception;
 struct Deserializer {
     private {
         ubyte* chunk, p, end;
-        Stream stream;
+        TCPConnection stream;
         size_t remaining; // bytes remaining in current message
         size_t chunkSize;
     }
     
-    this(Stream stream, size_t chunkSize) {
+    this(TCPConnection stream, size_t chunkSize) {
         chunk = cast(ubyte*)enforce(GC.malloc(chunkSize, GC.BlkAttr.NO_SCAN));
         p = chunk;
         end = chunk;
