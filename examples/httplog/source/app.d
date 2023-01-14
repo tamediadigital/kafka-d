@@ -1,6 +1,12 @@
 import std.stdio;
-import vibe.vibe;
-import kafkad.client;
+import std.concurrency : Tid, setMaxMailboxSize, MailboxFull, OnCrowding, send, receive;
+
+import vibe.core.core : runTask;
+import vibe.core.task : Task;
+import vibe.core.log : setLogLevel, logInfo, LogLevel;
+import vibe.http.server : listenHTTP, HTTPServerRequest, HTTPServerResponse, HTTPServerSettings;
+
+import kafkad.client : BrokerAddress, Client, Configuration, Producer;
 
 shared static this()
 {
@@ -11,7 +17,7 @@ shared static this()
     
     listenHTTP(settings, &handleRequest);
 
-    producerTid = runTask({
+    Task task = runTask({
         Configuration config;
         // adjust config's properties if necessary
         config.metadataRefreshRetryCount = 0;
@@ -30,13 +36,14 @@ shared static this()
         }
     });
 
+    producerTid = task.tid();
+
     setMaxMailboxSize(producerTid, 100, OnCrowding.throwException);
 }
 
-shared Tid producerTid;
+Tid producerTid;
 
-void handleRequest(HTTPServerRequest req,
-    HTTPServerResponse res)
+void handleRequest(HTTPServerRequest req, HTTPServerResponse res)
 {
     if (req.path == "/")
         res.writeBody("Hello, World!", "text/plain");

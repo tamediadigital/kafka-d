@@ -4,7 +4,8 @@
     "authors": [ "Piotr Szturmaj" ],
     "dependencies": {
         "kafka-d": {"version": "~master", "path": "../../"},
-        "vibe-d": "~>0.7.25"
+        "vibe-core": ">=1.16.0",
+        "vibe-d:web": ">=0.9.0"
     },
     "versions": ["VibeDefaultMain"]
 }

@@ -5,6 +5,5 @@
     "authors": [ "Piotr Szturmaj" ],
     "dependencies": {
         "kafka-d": {"version": "~master", "path": "../../"}
-    },
-	"dflags" : ["-version=VibeUseOpenSSL11"]
+    }
 }

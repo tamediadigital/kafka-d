@@ -5,7 +5,14 @@
     "authors": ["Piotr Szturmaj", "Yannick Koechlin"],
     "license" : "MIT",
     "dependencies": {
-        "vibe-d": ">=0.8.4"
+        "vibe-core": ">=1.16.0"
+    },
+    "buildRequirements": [
+		"allowWarnings"
+	],
+    "toolchainRequirements": {
+        "dub": ">=1.14.0",
+        "frontend": ">=2.090"
     },
     "libs": ["snappy"],
     "targetType": "library"

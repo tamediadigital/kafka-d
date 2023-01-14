@@ -1,6 +1,9 @@
-﻿import std.stdio;
-import vibe.vibe;
-import kafkad.client;
+﻿import std.stdio : writefln;
+
+import vibe.core.core : runTask, runEventLoop, runWorkerTask;
+import vibe.core.log : setLogLevel, LogLevel;
+
+import kafkad.client : BrokerAddress, Client, Configuration, Consumer, Offsets;
 
 void main() {
     runTask({
