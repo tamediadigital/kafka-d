@@ -12,9 +12,21 @@ __dummy.html
 *.userprefs
 *.a
 dub.selections.json
+
+# Ignore SublimeText specific files
+*.sublime-workspace
 kafka-d.sublime-project
 examples/consumer/consumer.sublime-project
 examples/producer/producer.sublime-project
+
+# Ignore Visual Studio code specific files
+launch.json
+settings.json
+*.userprefs
+
+# Ignore built artifacts
 __test__library__
+*-test-library
 examples/consumer/consumer
+examples/httplog/httplog
 examples/producer/producer

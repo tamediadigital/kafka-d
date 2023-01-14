@@ -1,5 +1,6 @@
-Kafka-d is a D Kafka client that depends on the vibe.d framework.
+Kafka-d is a D Kafka client that depends on the vibe-core.
 
+[![DUB Package](https://img.shields.io/dub/v/kafka-d.svg)](https://code.dlang.org/packages/kafka-d) 
 [![Build Status](https://travis-ci.org/tamediadigital/kafka-d.svg?branch=master)](https://travis-ci.org/tamediadigital/kafka-d)
 
 #### Usage
