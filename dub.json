@@ -12,7 +12,7 @@
 	],
     "toolchainRequirements": {
         "dub": ">=1.14.0",
-        "frontend": ">=2.087"
+        "frontend": ">=2.090"
     },
     "libs": ["snappy"],
     "targetType": "library"

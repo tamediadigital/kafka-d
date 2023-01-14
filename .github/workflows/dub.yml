@@ -1,0 +1,107 @@
+name: dub
+
+on:
+  schedule:
+    - cron: '30 2 2 * *'
+  push:
+  pull_request:
+    branches: [ "master" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+
+    name: ${{ matrix.compiler }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, macos-latest ]
+        compiler:
+          - dmd-latest
+          - ldc-latest
+          - dmd-2.101.2
+          - dmd-2.100.2
+          - dmd-2.099.1
+          - ldc-1.29.0 # eq to dmd v2.099.1
+        include:
+          - { os: ubuntu-latest, compiler: dmd-2.098.1 } # 2021 December
+          - { os: ubuntu-latest, compiler: dmd-2.097.2 } # 2021
+          - { os: ubuntu-latest, compiler: dmd-2.095.1 } # 2021
+          - { os: ubuntu-latest, compiler: dmd-2.090.1 } # 2020 Feb
+          - { os: ubuntu-latest, compiler: ldc-1.28.1 }
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Install D ${{ matrix.compiler }}
+      uses: dlang-community/setup-dlang@v1
+      with:
+        compiler: ${{ matrix.compiler }}
+
+    - name: Install dependencies on Ubuntu
+      if: startsWith(matrix.os, 'ubuntu')
+      run: sudo apt-get update && sudo apt-get install libsnappy-dev -y
+
+    - name: Install dependencies on Mac OSX
+      if: startsWith(matrix.os, 'macos')
+      run: brew install snappy
+
+    - name: 'dub build'
+      run: dub build --compiler=$DC
+
+    - name: 'dub test'
+      run: dub test --compiler=$DC
+
+    - name: Build the Consumer Example
+      working-directory: ./examples/consumer
+      run: dub build
+
+    - name: Build the HTTP Log Example
+      working-directory: ./examples/httplog
+      run: dub build
+
+    - name: Build the Producer Example
+      working-directory: ./examples/producer
+      run: dub build
+
+#
+# On Ubuntu we can use GDC. The compatibility of gdc is:
+#   gcc gdc-10  -> 2.076 (default on Ubuntu 20.04)
+#   gcc gdc-11  -> 2.076
+#   gcc gdc-12  -> 2.100
+# Unfortunately gdc builds are blocked by https://github.com/D-Programming-Deimos/openssl/issues/94
+#
+#  gdc-latest:
+#    name: ${{ matrix.compiler }} on ${{ matrix.os }}
+#    strategy:
+#      fail-fast: false
+#      matrix:
+#        os: [ ubuntu-22.04 ]
+#        compiler: [ gdc-10, gdc-11, gdc-12 ]
+#    runs-on: ${{ matrix.os }}
+#    steps:
+#    - uses: actions/checkout@v3
+#
+#    - name: Install DMD (so dub is available)
+#      uses: dlang-community/setup-dlang@v1
+#      with:
+#        compiler: dmd-latest
+#
+#    - name: Install ${{ matrix.compiler }}
+#      run: |
+#        sudo apt-get update
+#        sudo apt-get install ${{ matrix.compiler }} -y
+#        sudo apt-get install libsnappy-dev -y
+#
+#    - name: Show version
+#      run: |
+#        ${{ matrix.compiler }} --version
+#        dub --version
+#
+#    - name: Build with release profile
+#      env:
+#        DC: ${{ matrix.compiler }}
+#      run: dub build --compiler=${{ matrix.compiler }}
